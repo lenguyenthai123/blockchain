@@ -1,447 +1,412 @@
-// Mock blockchain data and API functions for ThaiCoin
+// Mock blockchain API functions for ThaiCoin
+export interface Transaction {
+  id: string
+  hash: string
+  tx_hash: string
+  from: string
+  from_address: string
+  to: string
+  to_address: string
+  amount: number
+  value: number
+  fee: number
+  gas_used: number
+  gas_price: number
+  timestamp: string
+  status: "pending" | "confirmed" | "failed"
+  block_number: number
+  confirmations: number
+  type: "send" | "receive"
+}
 
 export interface Block {
   number: number
   hash: string
-  timestamp: number
+  timestamp: string
+  transactions: number
   miner: string
-  transactionCount: number
-  reward: number
-  gasUsed: number
-  gasLimit: number
-  difficulty: number
-}
-
-export interface Transaction {
-  hash: string
-  from: string
-  to: string
-  value: number
-  gasPrice: number
-  gasUsed: number
-  timestamp: number
-  status: "success" | "failed" | "pending"
-  blockNumber: number
+  gas_used: number
+  gas_limit: number
+  size: number
 }
 
 export interface NetworkStats {
-  totalTransactions: string
-  tps: string
-  gasPrice: number
-  hashRate: string
   blockHeight: number
-  avgBlockTime: string
-  difficulty: number
-  lastFinalizedBlock: string
-  lastSafeBlock: string
+  totalTransactions: number
+  hashRate: string
+  difficulty: string
+  gasPrice: number
+  activeNodes: number
+  networkHealth: "healthy" | "warning" | "critical"
 }
 
 export interface WalletStats {
+  balance: number
   totalTransactions: number
   totalSent: number
   totalReceived: number
-  firstTransaction: string | null
+  pendingTransactions: number
 }
 
 export interface PriceData {
-  price: string
+  price: number
   change: number
   changePercent: string
-  marketCap: string
-  volume24h: string
+  volume24h: number
+  marketCap: number
 }
 
-// Generate mock data
-const generateMockAddress = (): string => {
+// Generate consistent mock addresses
+const generateAddress = (seed: string): string => {
   const chars = "0123456789abcdef"
   let result = "0x"
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) & 0xffffffff
+  }
   for (let i = 0; i < 40; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    result += chars[Math.abs(hash + i) % 16]
   }
   return result
 }
 
-const generateMockHash = (): string => {
+// Generate consistent transaction hash
+const generateTxHash = (seed: string): string => {
   const chars = "0123456789abcdef"
   let result = "0x"
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) & 0xffffffff
+  }
   for (let i = 0; i < 64; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    result += chars[Math.abs(hash + i) % 16]
   }
   return result
 }
 
-// Mock API functions
-export const getNetworkStats = async (): Promise<NetworkStats> => {
+// Mock data generators
+const mockAddresses = [
+  generateAddress("alice"),
+  generateAddress("bob"),
+  generateAddress("charlie"),
+  generateAddress("david"),
+  generateAddress("eve"),
+]
+
+export async function getNetworkStats(): Promise<NetworkStats> {
   // Simulate API delay
   await new Promise((resolve) => setTimeout(resolve, 500))
 
   return {
-    totalTransactions: (2847610000 + Math.floor(Math.random() * 1000)).toLocaleString(),
-    tps: (15 + Math.random() * 10).toFixed(1),
-    gasPrice: Math.floor(12 + Math.random() * 8),
-    hashRate: (1.2 + Math.random() * 0.5).toFixed(1),
-    blockHeight: 22817956 + Math.floor(Math.random() * 100),
-    avgBlockTime: (9.8 + Math.random() * 1.4).toFixed(1),
-    difficulty: 4,
-    lastFinalizedBlock: (22817956 + Math.floor(Math.random() * 50)).toString(),
-    lastSafeBlock: (22817988 + Math.floor(Math.random() * 20)).toString(),
+    blockHeight: 2201834 + Math.floor(Math.random() * 100),
+    totalTransactions: 15847392 + Math.floor(Math.random() * 1000),
+    hashRate: `${(125.5 + Math.random() * 10).toFixed(1)} TH/s`,
+    difficulty: `${(8.2 + Math.random()).toFixed(2)}T`,
+    gasPrice: 12 + Math.floor(Math.random() * 8),
+    activeNodes: 1247 + Math.floor(Math.random() * 100),
+    networkHealth: Math.random() > 0.1 ? "healthy" : "warning",
   }
 }
 
-export const getMyCoinPrice = async (): Promise<PriceData> => {
+export async function getMyCoinPrice(): Promise<PriceData> {
   await new Promise((resolve) => setTimeout(resolve, 300))
 
-  const basePrice = 12.45
-  const change = (Math.random() - 0.5) * 2 // -1 to 1
-  const price = (basePrice + change).toFixed(2)
+  const basePrice = 12.57
+  const change = (Math.random() - 0.5) * 2
+  const price = basePrice + change
 
   return {
-    price,
-    change,
-    changePercent: (change * 8).toFixed(2),
-    marketCap: (298054191819 + Math.floor(Math.random() * 1000000000)).toLocaleString(),
-    volume24h: (1234567890 + Math.floor(Math.random() * 100000000)).toLocaleString(),
+    price: Number(price.toFixed(2)),
+    change: Number(change.toFixed(4)),
+    changePercent: `${change >= 0 ? "+" : ""}${((change / basePrice) * 100).toFixed(2)}`,
+    volume24h: 2847392 + Math.floor(Math.random() * 100000),
+    marketCap: 125847392 + Math.floor(Math.random() * 1000000),
   }
 }
 
-export const getLatestBlocks = async (): Promise<Block[]> => {
+export async function getLatestBlocks(limit = 10): Promise<Block[]> {
   await new Promise((resolve) => setTimeout(resolve, 400))
 
   const blocks: Block[] = []
-  const currentTime = Math.floor(Date.now() / 1000)
+  const currentBlock = 2201834
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < limit; i++) {
     blocks.push({
-      number: 22817956 - i,
-      hash: generateMockHash(),
-      timestamp: currentTime - i * 12, // 12 seconds per block
-      miner: generateMockAddress(),
-      transactionCount: Math.floor(50 + Math.random() * 200),
-      reward: 2.5,
-      gasUsed: Math.floor(8000000 + Math.random() * 4000000),
-      gasLimit: 12000000,
-      difficulty: 4 + Math.random() * 2,
+      number: currentBlock - i,
+      hash: generateTxHash(`block-${currentBlock - i}`),
+      timestamp: new Date(Date.now() - i * 15000).toISOString(),
+      transactions: 150 + Math.floor(Math.random() * 100),
+      miner: mockAddresses[i % mockAddresses.length],
+      gas_used: 8000000 + Math.floor(Math.random() * 2000000),
+      gas_limit: 10000000,
+      size: 50000 + Math.floor(Math.random() * 20000),
     })
   }
 
   return blocks
 }
 
-export const getLatestTransactions = async (): Promise<Transaction[]> => {
-  await new Promise((resolve) => setTimeout(resolve, 350))
+export async function getLatestTransactions(limit = 10): Promise<Transaction[]> {
+  await new Promise((resolve) => setTimeout(resolve, 400))
 
   const transactions: Transaction[] = []
-  const currentTime = Math.floor(Date.now() / 1000)
 
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < limit; i++) {
+    const hash = generateTxHash(`tx-${Date.now()}-${i}`)
+    const from = mockAddresses[Math.floor(Math.random() * mockAddresses.length)]
+    const to = mockAddresses[Math.floor(Math.random() * mockAddresses.length)]
+    const amount = Number((Math.random() * 100).toFixed(4))
+
     transactions.push({
-      hash: generateMockHash(),
-      from: generateMockAddress(),
-      to: generateMockAddress(),
-      value: Math.random() * 100 + 0.1,
-      gasPrice: Math.floor(15 + Math.random() * 10),
-      gasUsed: Math.floor(21000 + Math.random() * 50000),
-      timestamp: currentTime - i * 5,
-      status: Math.random() > 0.1 ? "success" : "failed",
-      blockNumber: 22817956 - Math.floor(i / 3),
+      id: `tx-${i}`,
+      hash,
+      tx_hash: hash,
+      from,
+      from_address: from,
+      to,
+      to_address: to,
+      amount,
+      value: amount,
+      fee: Number((Math.random() * 0.01).toFixed(6)),
+      gas_used: 21000 + Math.floor(Math.random() * 50000),
+      gas_price: 12 + Math.floor(Math.random() * 8),
+      timestamp: new Date(Date.now() - i * 30000).toISOString(),
+      status: Math.random() > 0.1 ? "confirmed" : "pending",
+      block_number: 2201834 - Math.floor(i / 3),
+      confirmations: Math.floor(Math.random() * 100),
+      type: Math.random() > 0.5 ? "send" : "receive",
     })
   }
 
   return transactions
 }
 
-export const getWalletBalance = async (address: string): Promise<number> => {
-  await new Promise((resolve) => setTimeout(resolve, 600))
+export async function getWalletBalance(address: string): Promise<number> {
+  await new Promise((resolve) => setTimeout(resolve, 300))
 
-  // Generate a consistent balance based on address
-  const hash = address.split("").reduce((a, b) => {
-    a = (a << 5) - a + b.charCodeAt(0)
-    return a & a
-  }, 0)
+  // Generate consistent balance based on address
+  let hash = 0
+  for (let i = 0; i < address.length; i++) {
+    hash = ((hash << 5) - hash + address.charCodeAt(i)) & 0xffffffff
+  }
 
-  const balance = Math.abs(hash % 10000) / 100 + Math.random() * 50
-  return Math.max(balance, 0.1)
+  return Number((Math.abs(hash % 10000) / 100).toFixed(4))
 }
 
-export const getWalletStats = async (address: string): Promise<WalletStats> => {
-  await new Promise((resolve) => setTimeout(resolve, 700))
+export async function getWalletStats(address: string): Promise<WalletStats> {
+  await new Promise((resolve) => setTimeout(resolve, 400))
 
-  // Generate consistent stats based on address
-  const hash = address.split("").reduce((a, b) => {
-    a = (a << 5) - a + b.charCodeAt(0)
-    return a & a
-  }, 0)
-
-  const totalTransactions = Math.abs(hash % 100) + 5
-  const totalSent = Math.abs(hash % 500) / 10 + Math.random() * 20
-  const totalReceived = totalSent + Math.random() * 30 + 10
+  const balance = await getWalletBalance(address)
 
   return {
-    totalTransactions,
-    totalSent,
-    totalReceived,
-    firstTransaction: new Date(Date.now() - Math.abs(hash % 365) * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    balance,
+    totalTransactions: 45 + Math.floor(Math.random() * 100),
+    totalSent: Number((balance * 0.6).toFixed(4)),
+    totalReceived: Number((balance * 1.4).toFixed(4)),
+    pendingTransactions: Math.floor(Math.random() * 3),
   }
 }
 
-export const getTransactionHistory = async (address: string): Promise<Transaction[]> => {
-  await new Promise((resolve) => setTimeout(resolve, 800))
+export async function getTransactionHistory(address: string, limit = 20): Promise<Transaction[]> {
+  await new Promise((resolve) => setTimeout(resolve, 500))
 
   const transactions: Transaction[] = []
-  const currentTime = Math.floor(Date.now() / 1000)
 
-  // Generate consistent transaction history based on address
-  const hash = address.split("").reduce((a, b) => {
-    a = (a << 5) - a + b.charCodeAt(0)
-    return a & a
-  }, 0)
-
-  const txCount = Math.abs(hash % 20) + 5
-
-  for (let i = 0; i < txCount; i++) {
+  for (let i = 0; i < limit; i++) {
+    const hash = generateTxHash(`history-${address}-${i}`)
     const isOutgoing = Math.random() > 0.5
+    const otherAddress = mockAddresses[Math.floor(Math.random() * mockAddresses.length)]
+    const amount = Number((Math.random() * 50).toFixed(4))
+
     transactions.push({
-      hash: generateMockHash(),
-      from: isOutgoing ? address : generateMockAddress(),
-      to: isOutgoing ? generateMockAddress() : address,
-      value: Math.random() * 50 + 0.01,
-      gasPrice: Math.floor(15 + Math.random() * 10),
-      gasUsed: Math.floor(21000 + Math.random() * 50000),
-      timestamp: currentTime - i * 3600 * 24, // Daily transactions
-      status: Math.random() > 0.05 ? "success" : "failed",
-      blockNumber: 22817956 - Math.floor(i * 10),
+      id: `history-${i}`,
+      hash,
+      tx_hash: hash,
+      from: isOutgoing ? address : otherAddress,
+      from_address: isOutgoing ? address : otherAddress,
+      to: isOutgoing ? otherAddress : address,
+      to_address: isOutgoing ? otherAddress : address,
+      amount,
+      value: amount,
+      fee: Number((Math.random() * 0.005).toFixed(6)),
+      gas_used: 21000 + Math.floor(Math.random() * 30000),
+      gas_price: 10 + Math.floor(Math.random() * 10),
+      timestamp: new Date(Date.now() - i * 3600000).toISOString(),
+      status: Math.random() > 0.05 ? "confirmed" : "pending",
+      block_number: 2201834 - Math.floor(i / 2),
+      confirmations: Math.floor(Math.random() * 200),
+      type: isOutgoing ? "send" : "receive",
     })
   }
 
-  return transactions.sort((a, b) => b.timestamp - a.timestamp)
+  return transactions
 }
 
-export const sendTransaction = async (
-  from: string,
+export async function getTransactionDetails(hash: string): Promise<Transaction | null> {
+  await new Promise((resolve) => setTimeout(resolve, 300))
+
+  // Generate consistent transaction details based on hash
+  let hashNum = 0
+  for (let i = 0; i < hash.length; i++) {
+    hashNum = ((hashNum << 5) - hashNum + hash.charCodeAt(i)) & 0xffffffff
+  }
+
+  const from = mockAddresses[Math.abs(hashNum) % mockAddresses.length]
+  const to = mockAddresses[Math.abs(hashNum + 1) % mockAddresses.length]
+  const amount = Number((Math.abs(hashNum % 10000) / 100).toFixed(4))
+
+  return {
+    id: hash,
+    hash,
+    tx_hash: hash,
+    from,
+    from_address: from,
+    to,
+    to_address: to,
+    amount,
+    value: amount,
+    fee: Number((Math.random() * 0.01).toFixed(6)),
+    gas_used: 21000 + Math.floor(Math.random() * 50000),
+    gas_price: 12 + Math.floor(Math.random() * 8),
+    timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+    status: Math.random() > 0.1 ? "confirmed" : "pending",
+    block_number: 2201834 - Math.floor(Math.random() * 100),
+    confirmations: Math.floor(Math.random() * 100),
+    type: Math.random() > 0.5 ? "send" : "receive",
+  }
+}
+
+export async function estimateTransactionFee(
   to: string,
   amount: number,
-  gasPrice: number,
-  privateKey: string,
-): Promise<{ hash: string; status: string }> => {
-  await new Promise((resolve) => setTimeout(resolve, 2000))
+): Promise<{
+  gasEstimate: number
+  gasPrice: number
+  totalFee: number
+  totalFeeUSD: number
+}> {
+  await new Promise((resolve) => setTimeout(resolve, 200))
 
-  // Simulate transaction validation
-  if (!from || !to || amount <= 0) {
+  // Validate inputs
+  if (!to || amount <= 0) {
     throw new Error("Invalid transaction parameters")
   }
 
-  if (Math.random() < 0.1) {
-    throw new Error("Transaction failed: Insufficient gas or network error")
-  }
+  // Base gas for simple transfer
+  const baseGas = 21000
+  // Additional gas for complex transactions
+  const additionalGas = Math.floor(Math.random() * 10000)
+  const gasEstimate = baseGas + additionalGas
+
+  // Current gas price in Gwei
+  const gasPrice = 12 + Math.floor(Math.random() * 8)
+
+  // Calculate total fee in THC
+  const totalFeeWei = gasEstimate * gasPrice * 1e9 // Convert Gwei to Wei
+  const totalFee = totalFeeWei / 1e18 // Convert Wei to THC
+
+  // Ensure minimum fee
+  const finalFee = Math.max(totalFee, 0.0001)
+
+  // Convert to USD (assuming 1 THC = $12.57)
+  const totalFeeUSD = finalFee * 12.57
 
   return {
-    hash: generateMockHash(),
-    status: "pending",
+    gasEstimate,
+    gasPrice,
+    totalFee: Number(finalFee.toFixed(6)),
+    totalFeeUSD: Number(totalFeeUSD.toFixed(4)),
   }
 }
 
-export const getBlockByNumber = async (blockNumber: number): Promise<Block | null> => {
-  await new Promise((resolve) => setTimeout(resolve, 400))
+export async function sendTransaction(
+  from: string,
+  to: string,
+  amount: number,
+  gasPrice?: number,
+): Promise<{
+  success: boolean
+  hash?: string
+  error?: string
+}> {
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
-  if (blockNumber > 22817956 || blockNumber < 1) {
+  // Validate inputs
+  if (!from || !to || amount <= 0) {
+    return {
+      success: false,
+      error: "Invalid transaction parameters",
+    }
+  }
+
+  // Simulate occasional failures
+  if (Math.random() < 0.1) {
+    return {
+      success: false,
+      error: "Insufficient gas or network congestion",
+    }
+  }
+
+  // Generate transaction hash
+  const hash = generateTxHash(`send-${from}-${to}-${amount}-${Date.now()}`)
+
+  return {
+    success: true,
+    hash,
+  }
+}
+
+export async function getBlockByNumber(blockNumber: number): Promise<Block | null> {
+  await new Promise((resolve) => setTimeout(resolve, 300))
+
+  if (blockNumber < 0 || blockNumber > 2201834) {
     return null
   }
 
   return {
     number: blockNumber,
-    hash: generateMockHash(),
-    timestamp: Math.floor(Date.now() / 1000) - (22817956 - blockNumber) * 12,
-    miner: generateMockAddress(),
-    transactionCount: Math.floor(50 + Math.random() * 200),
-    reward: 2.5,
-    gasUsed: Math.floor(8000000 + Math.random() * 4000000),
-    gasLimit: 12000000,
-    difficulty: 4 + Math.random() * 2,
+    hash: generateTxHash(`block-${blockNumber}`),
+    timestamp: new Date(Date.now() - (2201834 - blockNumber) * 15000).toISOString(),
+    transactions: 100 + Math.floor(Math.random() * 200),
+    miner: mockAddresses[blockNumber % mockAddresses.length],
+    gas_used: 7000000 + Math.floor(Math.random() * 3000000),
+    gas_limit: 10000000,
+    size: 40000 + Math.floor(Math.random() * 30000),
   }
 }
 
-export const getTransactionByHash = async (hash: string): Promise<Transaction | null> => {
-  await new Promise((resolve) => setTimeout(resolve, 500))
-
-  if (!hash.startsWith("0x") || hash.length !== 66) {
-    return null
-  }
-
-  return {
-    hash,
-    from: generateMockAddress(),
-    to: generateMockAddress(),
-    value: Math.random() * 100 + 0.1,
-    gasPrice: Math.floor(15 + Math.random() * 10),
-    gasUsed: Math.floor(21000 + Math.random() * 50000),
-    timestamp: Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 86400),
-    status: Math.random() > 0.1 ? "success" : "failed",
-    blockNumber: 22817956 - Math.floor(Math.random() * 1000),
-  }
-}
-
-// Chart data for network visualization
-export const getNetworkChartData = async () => {
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  const data = []
-  const now = new Date()
-
-  for (let i = 13; i >= 0; i--) {
-    const date = new Date(now)
-    date.setDate(date.getDate() - i)
-
-    data.push({
-      date: date.toISOString().split("T")[0],
-      transactions: Math.floor(800000 + Math.random() * 400000),
-      volume: Math.floor(50000 + Math.random() * 30000),
-      activeAddresses: Math.floor(25000 + Math.random() * 15000),
-    })
-  }
-
-  return data
-}
-
-// Mining and staking functions
-export const getMiningStats = async () => {
-  await new Promise((resolve) => setTimeout(resolve, 400))
-
-  return {
-    hashRate: (1.2 + Math.random() * 0.5).toFixed(1) + " TH/s",
-    difficulty: (4 + Math.random() * 2).toFixed(2),
-    blockReward: "2.5 THC",
-    nextDifficultyAdjustment: Math.floor(Math.random() * 2016) + " blocks",
-    estimatedNextDifficulty: (4 + Math.random() * 2).toFixed(2),
-  }
-}
-
-export const getStakingInfo = async (address: string) => {
-  await new Promise((resolve) => setTimeout(resolve, 500))
-
-  const balance = await getWalletBalance(address)
-  const stakedAmount = balance * 0.1
-
-  return {
-    stakedAmount,
-    stakingRewards: stakedAmount * 0.05, // 5% APY
-    stakingPeriod: "30 days",
-    nextReward: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    stakingAPY: "5.2%",
-  }
-}
-
-// Utility functions
-export const formatAddress = (address: string): string => {
-  if (!address) return ""
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
-
-export const formatHash = (hash: string): string => {
-  if (!hash) return ""
-  return `${hash.slice(0, 10)}...${hash.slice(-8)}`
-}
-
-export const formatTimeAgo = (timestamp: number): string => {
-  const seconds = Math.floor((Date.now() - timestamp * 1000) / 1000)
-
-  if (seconds < 60) return `${seconds} secs ago`
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} mins ago`
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} hours ago`
-
-  const days = Math.floor(hours / 24)
-  return `${days} days ago`
-}
-
-export const formatCurrency = (amount: number, currency = "THC"): string => {
-  return `${amount.toFixed(4)} ${currency}`
-}
-
-export const formatUSD = (amount: number): string => {
-  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+export async function getTransactionByHash(hash: string): Promise<Transaction | null> {
+  return getTransactionDetails(hash)
 }
 
 // WebSocket simulation for real-time updates
-export class BlockchainWebSocket {
-  private callbacks: { [key: string]: Function[] } = {}
-  private interval: NodeJS.Timeout | null = null
-
-  connect() {
-    console.log("🔗 Connecting to ThaiCoin WebSocket...")
-
-    // Simulate real-time updates
-    this.interval = setInterval(() => {
-      this.emit("newBlock", {
-        number: 22817956 + Math.floor(Math.random() * 100),
-        hash: generateMockHash(),
-        timestamp: Math.floor(Date.now() / 1000),
-        transactionCount: Math.floor(50 + Math.random() * 200),
-      })
-
-      this.emit("newTransaction", {
-        hash: generateMockHash(),
-        from: generateMockAddress(),
-        to: generateMockAddress(),
-        value: Math.random() * 100,
-        timestamp: Math.floor(Date.now() / 1000),
-      })
-
-      this.emit("priceUpdate", {
-        price: (12.45 + (Math.random() - 0.5) * 2).toFixed(2),
-        change: (Math.random() - 0.5) * 10,
-      })
-    }, 5000)
-  }
-
-  disconnect() {
-    console.log("🔌 Disconnecting from ThaiCoin WebSocket...")
-    if (this.interval) {
-      clearInterval(this.interval)
-      this.interval = null
+export function subscribeToUpdates(callback: (data: any) => void): () => void {
+  const interval = setInterval(async () => {
+    const updates = {
+      newBlock: Math.random() < 0.1,
+      newTransaction: Math.random() < 0.3,
+      priceUpdate: Math.random() < 0.2,
+      networkStats: await getNetworkStats(),
     }
-  }
+    callback(updates)
+  }, 5000)
 
-  on(event: string, callback: Function) {
-    if (!this.callbacks[event]) {
-      this.callbacks[event] = []
-    }
-    this.callbacks[event].push(callback)
-  }
-
-  off(event: string, callback: Function) {
-    if (this.callbacks[event]) {
-      this.callbacks[event] = this.callbacks[event].filter((cb) => cb !== callback)
-    }
-  }
-
-  private emit(event: string, data: any) {
-    if (this.callbacks[event]) {
-      this.callbacks[event].forEach((callback) => callback(data))
-    }
-  }
+  return () => clearInterval(interval)
 }
 
-// Export singleton instance
-export const blockchainWS = new BlockchainWebSocket()
-
 // Health check function
-export const checkNetworkHealth = async (): Promise<{
+export async function checkNetworkHealth(): Promise<{
   status: "healthy" | "degraded" | "down"
   latency: number
   blockHeight: number
-  peerCount: number
-}> => {
+}> {
   const start = Date.now()
-  await new Promise((resolve) => setTimeout(resolve, Math.random() * 200 + 50))
+  await new Promise((resolve) => setTimeout(resolve, Math.random() * 100))
   const latency = Date.now() - start
 
   return {
-    status: latency < 100 ? "healthy" : latency < 300 ? "degraded" : "down",
+    status: latency < 50 ? "healthy" : latency < 100 ? "degraded" : "down",
     latency,
-    blockHeight: 22817956 + Math.floor(Math.random() * 100),
-    peerCount: Math.floor(50 + Math.random() * 200),
+    blockHeight: 2201834 + Math.floor(Math.random() * 10),
   }
 }
