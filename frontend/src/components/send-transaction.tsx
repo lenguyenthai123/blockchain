@@ -20,18 +20,23 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
   const [amount, setAmount] = useState("")
   const [message, setMessage] = useState("")
   const [gasPrice, setGasPrice] = useState("20")
-  const [estimatedFee, setEstimatedFee] = useState(0)
+  const [estimatedFee, setEstimatedFee] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(false)
   const [transactionHash, setTransactionHash] = useState("")
   const [error, setError] = useState("")
 
   const handleEstimateFee = async () => {
-    if (!recipient || !amount) return
+    if (!recipient || !amount) {
+      setError("Please enter recipient and amount first")
+      return
+    }
 
     try {
+      setError("")
       const fee = await estimateTransactionFee(recipient, Number.parseFloat(amount), Number.parseInt(gasPrice))
-      setEstimatedFee(fee)
+      setEstimatedFee(fee || 0)
     } catch (err) {
+      console.error("Fee estimation error:", err)
       setError("Failed to estimate transaction fee")
     }
   }
@@ -39,6 +44,11 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
   const handleSendTransaction = async () => {
     if (!recipient || !amount) {
       setError("Please fill in all required fields")
+      return
+    }
+
+    if (!wallet?.address) {
+      setError("Invalid wallet")
       return
     }
 
@@ -52,18 +62,33 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
         amount: Number.parseFloat(amount),
         gasPrice: Number.parseInt(gasPrice),
         message: message,
-        privateKey: wallet.privateKey || wallet.private_key, // Support both formats
+        privateKey: wallet.privateKey || wallet.private_key,
       })
 
       setTransactionHash(txHash)
       setRecipient("")
       setAmount("")
       setMessage("")
+      setEstimatedFee(0)
     } catch (err) {
+      console.error("Transaction error:", err)
       setError("Transaction failed. Please check your inputs and try again.")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Check if wallet is valid
+  if (!wallet?.address) {
+    return (
+      <Card className="shadow-lg border-0">
+        <CardContent className="p-6">
+          <div className="text-center text-red-600">
+            <p>Invalid wallet. Please create or import a wallet first.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -72,9 +97,9 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
         <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 border-b">
           <CardTitle className="flex items-center gap-2 text-xl">
             <Send className="h-6 w-6 text-orange-600" />
-            Send MyCoin
+            Send ThaiCoin
           </CardTitle>
-          <CardDescription className="text-base">Send MyCoin to another wallet address</CardDescription>
+          <CardDescription className="text-base">Send ThaiCoin to another wallet address</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           {error && (
@@ -103,7 +128,7 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount (MYC)</Label>
+            <Label htmlFor="amount">Amount (THC)</Label>
             <Input
               id="amount"
               type="number"
@@ -159,11 +184,11 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
             <div className="p-4 bg-gray-50 rounded-lg">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Estimated Fee:</span>
-                <Badge variant="secondary">{estimatedFee.toFixed(6)} MYC</Badge>
+                <Badge variant="secondary">{estimatedFee.toFixed(6)} THC</Badge>
               </div>
               <div className="flex justify-between items-center mt-2">
                 <span className="text-sm text-gray-600">Total Cost:</span>
-                <Badge variant="default">{(Number.parseFloat(amount || "0") + estimatedFee).toFixed(6)} MYC</Badge>
+                <Badge variant="default">{(Number.parseFloat(amount || "0") + estimatedFee).toFixed(6)} THC</Badge>
               </div>
             </div>
           )}
@@ -180,7 +205,7 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
           <div className="grid grid-cols-4 gap-2">
             {[0.1, 0.5, 1.0, 5.0].map((value) => (
               <Button key={value} variant="outline" onClick={() => setAmount(value.toString())} className="text-sm">
-                {value} MYC
+                {value} THC
               </Button>
             ))}
           </div>

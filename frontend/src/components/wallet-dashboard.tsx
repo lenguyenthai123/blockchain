@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Wallet, TrendingUp, Activity, Clock, Copy } from "lucide-react"
+import { Wallet, TrendingUp, Activity, Clock, Copy, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getWalletBalance, getWalletStats, getNetworkStats } from "@/lib/blockchain"
 
@@ -13,27 +13,96 @@ interface WalletDashboardProps {
 }
 
 export default function WalletDashboard({ wallet }: WalletDashboardProps) {
-  const [balance, setBalance] = useState(0)
+  const [balance, setBalance] = useState<number>(0)
   const [stats, setStats] = useState<any>(null)
   const [networkStats, setNetworkStats] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string>("")
 
   useEffect(() => {
     const loadData = async () => {
-      const walletBalance = await getWalletBalance(wallet.address)
-      const walletStats = await getWalletStats(wallet.address)
-      const netStats = await getNetworkStats()
+      if (!wallet?.address) {
+        setError("Invalid wallet address")
+        setIsLoading(false)
+        return
+      }
 
-      setBalance(walletBalance)
-      setStats(walletStats)
-      setNetworkStats(netStats)
+      try {
+        setIsLoading(true)
+        setError("")
+
+        console.log("Loading wallet data for:", wallet.address)
+
+        const [walletBalance, walletStats, netStats] = await Promise.all([
+          getWalletBalance(wallet.address),
+          getWalletStats(wallet.address),
+          getNetworkStats(),
+        ])
+
+        console.log("Wallet balance:", walletBalance)
+        console.log("Wallet stats:", walletStats)
+        console.log("Network stats:", netStats)
+
+        setBalance(walletBalance || 0)
+        setStats(
+          walletStats || {
+            totalTransactions: 0,
+            totalSent: 0,
+            totalReceived: 0,
+            firstTransaction: null,
+          },
+        )
+        setNetworkStats(netStats)
+      } catch (error) {
+        console.error("Failed to load wallet data:", error)
+        setError("Failed to load wallet data")
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     loadData()
-  }, [wallet.address])
+  }, [wallet?.address])
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(wallet.address)
-    alert("Address copied to clipboard!")
+    if (wallet?.address) {
+      navigator.clipboard.writeText(wallet.address)
+      alert("Address copied to clipboard!")
+    }
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card className="shadow-lg border-0">
+          <CardContent className="p-6 flex items-center justify-center">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span>Loading wallet data...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Card className="shadow-lg border-0">
+          <CardContent className="p-6">
+            <div className="text-center text-red-600">
+              <p>{error}</p>
+              <Button onClick={() => window.location.reload()} className="mt-4" variant="outline">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -45,7 +114,7 @@ export default function WalletDashboard({ wallet }: WalletDashboardProps) {
             <Wallet className="h-6 w-6 text-green-600" />
             Wallet Overview
           </CardTitle>
-          <CardDescription className="text-base">Your MyCoin wallet statistics and balance</CardDescription>
+          <CardDescription className="text-base">Your ThaiCoin wallet statistics and balance</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -53,8 +122,10 @@ export default function WalletDashboard({ wallet }: WalletDashboardProps) {
               <div>
                 <label className="text-sm font-medium text-gray-500">Wallet Address</label>
                 <div className="flex items-center gap-2 mt-1">
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded flex-1 truncate">{wallet.address}</code>
-                  <Button size="sm" onClick={copyAddress}>
+                  <code className="text-sm bg-gray-100 px-2 py-1 rounded flex-1 truncate">
+                    {wallet?.address || "No address"}
+                  </code>
+                  <Button variant="outline" size="sm" onClick={copyAddress} disabled={!wallet?.address}>
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
@@ -62,7 +133,9 @@ export default function WalletDashboard({ wallet }: WalletDashboardProps) {
 
               <div>
                 <label className="text-sm font-medium text-gray-500">Balance</label>
-                <div className="text-3xl font-bold text-blue-600 mt-1">{balance.toFixed(4)} MYC</div>
+                <div className="text-3xl font-bold text-blue-600 mt-1">
+                  {typeof balance === "number" ? balance.toFixed(4) : "0.0000"} THC
+                </div>
               </div>
             </div>
 
@@ -71,15 +144,19 @@ export default function WalletDashboard({ wallet }: WalletDashboardProps) {
                 <>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">Total Transactions</span>
-                    <span className="font-medium">{stats.totalTransactions}</span>
+                    <span className="font-medium">{stats.totalTransactions || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">Total Sent</span>
-                    <span className="font-medium">{stats.totalSent.toFixed(4)} MYC</span>
+                    <span className="font-medium">
+                      {typeof stats.totalSent === "number" ? stats.totalSent.toFixed(4) : "0.0000"} THC
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">Total Received</span>
-                    <span className="font-medium">{stats.totalReceived.toFixed(4)} MYC</span>
+                    <span className="font-medium">
+                      {typeof stats.totalReceived === "number" ? stats.totalReceived.toFixed(4) : "0.0000"} THC
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">First Transaction</span>
@@ -146,7 +223,9 @@ export default function WalletDashboard({ wallet }: WalletDashboardProps) {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-sm font-medium">Proof of Stake</p>
-              <p className="text-sm text-muted-foreground">Staking {(balance * 0.1).toFixed(4)} MYC</p>
+              <p className="text-sm text-muted-foreground">
+                Staking {typeof balance === "number" ? (balance * 0.1).toFixed(4) : "0.0000"} THC
+              </p>
             </div>
             <Badge variant="default">Active</Badge>
           </div>

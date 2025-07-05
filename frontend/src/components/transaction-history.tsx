@@ -19,29 +19,41 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTx, setSelectedTx] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
     const loadTransactions = async () => {
+      if (!wallet?.address) {
+        setError("Invalid wallet address")
+        setIsLoading(false)
+        return
+      }
+
       try {
+        setIsLoading(true)
+        setError("")
         const txHistory = await getTransactionHistory(wallet.address)
-        setTransactions(txHistory)
-        setFilteredTransactions(txHistory)
+        setTransactions(txHistory || [])
+        setFilteredTransactions(txHistory || [])
       } catch (error) {
         console.error("Failed to load transaction history:", error)
+        setError("Failed to load transaction history")
       } finally {
         setIsLoading(false)
       }
     }
 
     loadTransactions()
-  }, [wallet.address])
+  }, [wallet?.address])
 
   useEffect(() => {
+    if (!transactions) return
+
     const filtered = transactions.filter(
       (tx) =>
-        tx.hash.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.to.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.from.toLowerCase().includes(searchTerm.toLowerCase()),
+        tx.tx_hash?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.to_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.from_address?.toLowerCase().includes(searchTerm.toLowerCase()),
     )
     setFilteredTransactions(filtered)
   }, [searchTerm, transactions])
@@ -52,11 +64,13 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
       setSelectedTx(txDetails)
     } catch (error) {
       console.error("Failed to load transaction details:", error)
+      alert("Failed to load transaction details")
     }
   }
 
   const getTransactionType = (tx: any) => {
-    return tx.from.toLowerCase() === wallet.address.toLowerCase() ? "sent" : "received"
+    if (!wallet?.address || !tx.from_address) return "unknown"
+    return tx.from_address?.toLowerCase() === wallet.address.toLowerCase() ? "sent" : "received"
   }
 
   const getStatusColor = (status: string) => {
@@ -73,11 +87,26 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
   }
 
   const formatAddress = (address: string) => {
+    if (!address) return "Unknown"
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
   const formatDate = (timestamp: number) => {
+    if (!timestamp) return "Unknown"
     return new Date(timestamp * 1000).toLocaleString()
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <Card className="shadow-lg border-0">
+        <CardContent className="p-6">
+          <div className="text-center text-red-600">
+            <p>{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -88,7 +117,7 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
             <History className="h-6 w-6 text-purple-600" />
             Transaction History
           </CardTitle>
-          <CardDescription className="text-base">View all your MyCoin transactions</CardDescription>
+          <CardDescription className="text-base">View all your ThaiCoin transactions</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           <div className="space-y-4">
@@ -137,7 +166,7 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
                     filteredTransactions.map((tx) => {
                       const type = getTransactionType(tx)
                       return (
-                        <TableRow key={tx.hash} className="hover:bg-gray-50">
+                        <TableRow key={tx.tx_hash} className="hover:bg-gray-50">
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {type === "sent" ? (
@@ -149,15 +178,17 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
                             </div>
                           </TableCell>
                           <TableCell>
-                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">{formatAddress(tx.hash)}</code>
+                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">{formatAddress(tx.tx_hash)}</code>
                           </TableCell>
                           <TableCell>
-                            <code className="text-sm">{formatAddress(type === "sent" ? tx.to : tx.from)}</code>
+                            <code className="text-sm">
+                              {formatAddress(type === "sent" ? tx.to_address : tx.from_address)}
+                            </code>
                           </TableCell>
                           <TableCell>
                             <span className={type === "sent" ? "text-red-600" : "text-green-600"}>
                               {type === "sent" ? "-" : "+"}
-                              {tx.value.toFixed(4)} MYC
+                              {typeof tx.value === "number" ? tx.value.toFixed(4) : "0.0000"} THC
                             </span>
                           </TableCell>
                           <TableCell>
@@ -165,7 +196,7 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
                           </TableCell>
                           <TableCell className="text-sm text-gray-500">{formatDate(tx.timestamp)}</TableCell>
                           <TableCell>
-                            <Button size="sm" variant="ghost" onClick={() => handleTransactionClick(tx.hash)}>
+                            <Button size="sm" variant="ghost" onClick={() => handleTransactionClick(tx.tx_hash)}>
                               <ExternalLink className="h-4 w-4" />
                             </Button>
                           </TableCell>
@@ -191,37 +222,42 @@ export default function TransactionHistory({ wallet }: TransactionHistoryProps) 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-500">Transaction Hash</label>
-                <code className="block text-sm bg-gray-100 p-2 rounded mt-1 break-all">{selectedTx.hash}</code>
+                <code className="block text-sm bg-gray-100 p-2 rounded mt-1 break-all">{selectedTx.tx_hash}</code>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Block Number</label>
-                <div className="text-sm mt-1">{selectedTx.blockNumber}</div>
+                <div className="text-sm mt-1">{selectedTx.block_number || "Pending"}</div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">From</label>
-                <code className="block text-sm bg-gray-100 p-2 rounded mt-1 break-all">{selectedTx.from}</code>
+                <code className="block text-sm bg-gray-100 p-2 rounded mt-1 break-all">{selectedTx.from_address}</code>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">To</label>
-                <code className="block text-sm bg-gray-100 p-2 rounded mt-1 break-all">{selectedTx.to}</code>
+                <code className="block text-sm bg-gray-100 p-2 rounded mt-1 break-all">{selectedTx.to_address}</code>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Amount</label>
-                <div className="text-lg font-semibold mt-1">{selectedTx.value.toFixed(4)} MYC</div>
+                <div className="text-lg font-semibold mt-1">
+                  {typeof selectedTx.value === "number" ? selectedTx.value.toFixed(4) : "0.0000"} THC
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Gas Used</label>
                 <div className="text-sm mt-1">
-                  {selectedTx.gasUsed} / {selectedTx.gasLimit}
+                  {selectedTx.gas_used || 0} / {selectedTx.gas_limit || 0}
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Gas Price</label>
-                <div className="text-sm mt-1">{selectedTx.gasPrice} Gwei</div>
+                <div className="text-sm mt-1">{selectedTx.gas_price || 0} Gwei</div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-500">Transaction Fee</label>
-                <div className="text-sm mt-1">{selectedTx.fee.toFixed(6)} MYC</div>
+                <div className="text-sm mt-1">
+                  {typeof selectedTx.transaction_fee === "number" ? selectedTx.transaction_fee.toFixed(6) : "0.000000"}{" "}
+                  THC
+                </div>
               </div>
             </div>
 
