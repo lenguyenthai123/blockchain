@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Coins } from "lucide-react"
+import { Coins } from 'lucide-react'
 import CreateWallet from "@/components/create-wallet"
 import WalletDashboard from "@/components/wallet-dashboard"
 import SendTransaction from "@/components/send-transaction"
