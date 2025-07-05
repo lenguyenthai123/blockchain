@@ -1,6 +1,7 @@
 package services
 
 import (
+	_ "fmt"
 	"math/rand"
 	"mycoin-backend/models"
 	"time"
@@ -13,30 +14,30 @@ type BlockchainService struct {
 }
 
 type NetworkStats struct {
-	HashRate             string `json:"hash_rate"`
-	BlockHeight          int    `json:"block_height"`
-	AvgBlockTime         string `json:"avg_block_time"`
-	Difficulty           int    `json:"difficulty"`
-	GasPrice             int    `json:"gas_price"`
-	TotalTransactions    string `json:"total_transactions"`
-	TPS                  string `json:"tps"`
-	LastFinalizedBlock   string `json:"last_finalized_block"`
-	LastSafeBlock        string `json:"last_safe_block"`
+	HashRate           string `json:"hash_rate"`
+	BlockHeight        int    `json:"block_height"`
+	AvgBlockTime       string `json:"avg_block_time"`
+	Difficulty         int    `json:"difficulty"`
+	GasPrice           int    `json:"gas_price"`
+	TotalTransactions  string `json:"total_transactions"`
+	TPS                string `json:"tps"`
+	LastFinalizedBlock string `json:"last_finalized_block"`
+	LastSafeBlock      string `json:"last_safe_block"`
 }
 
 type PriceData struct {
-	Price         string `json:"price"`
+	Price         string  `json:"price"`
 	Change        float64 `json:"change"`
-	ChangePercent string `json:"change_percent"`
-	MarketCap     string `json:"market_cap"`
+	ChangePercent string  `json:"change_percent"`
+	MarketCap     string  `json:"market_cap"`
 }
 
 type BlockResponse struct {
-	Number           int     `json:"number"`
-	Timestamp        int64   `json:"timestamp"`
-	Miner            string  `json:"miner"`
-	TransactionCount int     `json:"transaction_count"`
-	Reward           string  `json:"reward"`
+	Number           int    `json:"number"`
+	Timestamp        int64  `json:"timestamp"`
+	Miner            string `json:"miner"`
+	TransactionCount int    `json:"transaction_count"`
+	Reward           string `json:"reward"`
 }
 
 func NewBlockchainService(db *gorm.DB) *BlockchainService {
@@ -93,15 +94,15 @@ func (s *BlockchainService) GetNetworkStats() (*NetworkStats, error) {
 	s.db.Model(&models.Transaction{}).Count(&txCount)
 
 	return &NetworkStats{
-		HashRate:             "1.2",
-		BlockHeight:          int(blockCount),
-		AvgBlockTime:         "10.2",
-		Difficulty:           4,
-		GasPrice:             rand.Intn(10) + 10,
-		TotalTransactions:    "2,847.61",
-		TPS:                  "18.2",
-		LastFinalizedBlock:   "22817956",
-		LastSafeBlock:        "22817988",
+		HashRate:           "1.2",
+		BlockHeight:        int(blockCount),
+		AvgBlockTime:       "10.2",
+		Difficulty:         4,
+		GasPrice:           rand.Intn(10) + 10,
+		TotalTransactions:  "2,847.61",
+		TPS:                "18.2",
+		LastFinalizedBlock: "22817956",
+		LastSafeBlock:      "22817988",
 	}, nil
 }
 
@@ -113,13 +114,4 @@ func (s *BlockchainService) GetMyCoinPrice() (*PriceData, error) {
 		ChangePercent: "+2.15",
 		MarketCap:     "298,054,191,819",
 	}, nil
-}
-
-func generateRandomHex(length int) string {
-	const charset = "0123456789abcdef"
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(b)
 }

@@ -13,7 +13,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://localhost/mycoin?sslmode=disable"),
+		DatabaseURL: getEnv("DATABASE_URL", "postgresql://neondb_owner:npg_XcZWPD6u2Cjh@ep-young-union-a1i53myc-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"),
 		JWTSecret:   getEnv("JWT_SECRET", "your-secret-key"),
 	}
 }

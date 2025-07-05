@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"net/http"
 	"mycoin-backend/services"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -10,12 +10,14 @@ import (
 
 func SetupNetworkRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	networkService := services.NewNetworkService(db)
-	
+
 	network := router.Group("/network")
 	{
-		network.GET("/stats", getNetworkStats(networkService))
+		network.GET("/stats", getNetworkStatistics(networkService)) // Đổi tên để tránh xung đột
 		network.POST("/mine", startMining(networkService))
 		network.POST("/stake", createStake(networkService))
+		network.GET("/mining-stats", getMiningStats(networkService))   // Thêm endpoint mới
+		network.GET("/staking-pools", getStakingPools(networkService)) // Thêm endpoint mới
 	}
 }
 
@@ -25,9 +27,15 @@ type CreateStakeRequest struct {
 	StakedAmount float64 `json:"staked_amount" binding:"required"`
 }
 
-func getNetworkStats(service *services.NetworkService) gin.HandlerFunc {
+type StartMiningRequest struct {
+	MinerAddress string `json:"miner_address" binding:"required"`
+	Difficulty   int    `json:"difficulty"`
+}
+
+// Đổi tên function để tránh xung đột với blockchain.go
+func getNetworkStatistics(service *services.NetworkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		stats, err := service.GetNetworkStats()
+		stats, err := service.GetNetworkStatistics()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -39,8 +47,19 @@ func getNetworkStats(service *services.NetworkService) gin.HandlerFunc {
 
 func startMining(service *services.NetworkService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Mining logic would be implemented here
-		c.JSON(http.StatusOK, gin.H{"message": "Mining started"})
+		var req StartMiningRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		result, err := service.StartMining(req.MinerAddress, req.Difficulty)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -59,5 +78,31 @@ func createStake(service *services.NetworkService) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, stake)
+	}
+}
+
+func getMiningStats(service *services.NetworkService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		minerAddress := c.Query("miner_address")
+
+		stats, err := service.GetMiningStats(minerAddress)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, stats)
+	}
+}
+
+func getStakingPools(service *services.NetworkService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		pools, err := service.GetStakingPools()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, pools)
 	}
 }

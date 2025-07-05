@@ -51,7 +51,7 @@ type MiningStats struct {
 	BlocksMined   int       `json:"blocks_mined" gorm:"default:0"`
 	TotalRewards  float64   `json:"total_rewards" gorm:"default:0"`
 	HashRate      float64   `json:"hash_rate" gorm:"default:0"`
-	LastBlockTime time.Time `json:"last_block_time"`
+	LastBlockTime time.Time `json:"last_block_time"` // ✅ Đã sửa: time.Time thay vì *time.Time
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
