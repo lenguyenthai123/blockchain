@@ -8,14 +8,20 @@ export function generateRandomBytes(length: number): string {
 
 export async function generateWallet(password: string) {
   try {
+    console.log("Calling API to create wallet...")
     const response = await apiClient.createWallet(password)
-    // ✅ Map API response to consistent format
-    return {
+    console.log("API Response:", response)
+
+    // ✅ Handle different response formats
+    const wallet = {
       address: response.address,
-      privateKey: response.private_key, // Map private_key to privateKey
+      privateKey: response.private_key || response.privateKey,
       mnemonic: response.mnemonic,
-      createdAt: response.created_at,
+      createdAt: response.created_at || response.createdAt,
     }
+
+    console.log("Processed wallet:", wallet)
+    return wallet
   } catch (error) {
     console.error("Failed to create wallet:", error)
     throw error
@@ -25,11 +31,10 @@ export async function generateWallet(password: string) {
 export async function importWalletFromPrivateKey(privateKey: string, password: string) {
   try {
     const response = await apiClient.importWalletFromPrivateKey(privateKey, password)
-    // ✅ Map API response to consistent format
     return {
       address: response.address,
-      privateKey: response.private_key, // Map private_key to privateKey
-      createdAt: response.created_at,
+      privateKey: response.private_key || response.privateKey,
+      createdAt: response.created_at || response.createdAt,
     }
   } catch (error) {
     console.error("Failed to import wallet from private key:", error)
@@ -40,12 +45,11 @@ export async function importWalletFromPrivateKey(privateKey: string, password: s
 export async function importWalletFromMnemonic(mnemonic: string, password: string) {
   try {
     const response = await apiClient.importWalletFromMnemonic(mnemonic, password)
-    // ✅ Map API response to consistent format
     return {
       address: response.address,
-      privateKey: response.private_key, // Map private_key to privateKey
+      privateKey: response.private_key || response.privateKey,
       mnemonic: response.mnemonic,
-      createdAt: response.created_at,
+      createdAt: response.created_at || response.createdAt,
     }
   } catch (error) {
     console.error("Failed to import wallet from mnemonic:", error)

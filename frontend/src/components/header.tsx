@@ -31,7 +31,7 @@ export default function Header() {
         <div className="flex items-center justify-between py-2 text-sm border-b border-gray-100">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
-              <span className="text-gray-600">MYC Price:</span>
+              <span className="text-gray-600">THC Price:</span>
               <span className="font-semibold text-blue-600">${priceData?.price || "12.45"}</span>
               <Badge variant={priceData?.change >= 0 ? "default" : "destructive"} className="text-xs">
                 {priceData?.change >= 0 ? "+" : ""}
@@ -60,11 +60,11 @@ export default function Header() {
         {/* Main Header */}
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">M</span>
+            <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">T</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">MyCoin Explorer</h1>
+              <h1 className="text-2xl font-bold text-gray-900">ThaiCoin Explorer</h1>
               <p className="text-sm text-gray-500">Blockchain Explorer & Wallet</p>
             </div>
           </div>

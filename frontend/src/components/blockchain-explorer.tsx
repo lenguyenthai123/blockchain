@@ -59,8 +59,8 @@ export default function BlockchainExplorer() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <Card className="lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">MYCOIN PRICE</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium text-gray-600">THAICOIN PRICE</CardTitle>
+            <TrendingUp className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${priceData?.price || "12.45"}</div>
@@ -99,7 +99,7 @@ export default function BlockchainExplorer() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">MARKET CAP</CardTitle>
-            <Globe className="h-4 w-4 text-purple-500" />
+            <Globe className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${priceData?.marketCap || "298,054,191,819"}</div>
@@ -189,7 +189,7 @@ export default function BlockchainExplorer() {
                   <div className="text-sm text-gray-500">{block.transactionCount} txns in 12 secs</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold">{block.reward} MYC</div>
+                  <div className="font-semibold">{block.reward} THC</div>
                 </div>
               </div>
             ))}
@@ -227,7 +227,7 @@ export default function BlockchainExplorer() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold">{tx.value} MYC</div>
+                  <div className="font-semibold">{tx.value} THC</div>
                 </div>
               </div>
             ))}
