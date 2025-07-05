@@ -52,7 +52,7 @@ export default function SendTransaction({ wallet }: SendTransactionProps) {
         amount: Number.parseFloat(amount),
         gasPrice: Number.parseInt(gasPrice),
         message: message,
-        privateKey: wallet.privateKey,
+        privateKey: wallet.privateKey || wallet.private_key, // Support both formats
       })
 
       setTransactionHash(txHash)
