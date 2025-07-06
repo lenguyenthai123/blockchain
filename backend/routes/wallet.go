@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"net/http"
 	"mycoin-backend/services"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -10,7 +10,7 @@ import (
 
 func SetupWalletRoutes(router *gin.RouterGroup, db *gorm.DB) {
 	walletService := services.NewWalletService(db)
-	
+
 	wallet := router.Group("/wallet")
 	{
 		wallet.POST("/create", createWallet(walletService))
@@ -92,7 +92,7 @@ func importFromMnemonic(service *services.WalletService) gin.HandlerFunc {
 func getWalletBalance(service *services.WalletService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		address := c.Param("address")
-		
+
 		balance, err := service.GetBalance(address)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -106,7 +106,7 @@ func getWalletBalance(service *services.WalletService) gin.HandlerFunc {
 func getWalletStats(service *services.WalletService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		address := c.Param("address")
-		
+
 		stats, err := service.GetStats(address)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

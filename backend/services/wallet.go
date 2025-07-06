@@ -40,7 +40,7 @@ func (s *WalletService) CreateWallet(password string) (*WalletResponse, error) {
 	// Create wallet in database
 	wallet := &models.Wallet{
 		Address: address,
-		Balance: rand.Float64()*100 + 10, // Random initial balance for demo
+		Balance: 0, // Random initial balance for demo
 		Nonce:   0,
 	}
 
@@ -107,7 +107,7 @@ func (s *WalletService) GetBalance(address string) (float64, error) {
 			// Create wallet if it doesn't exist
 			wallet = models.Wallet{
 				Address: address,
-				Balance: rand.Float64()*100 + 10,
+				Balance: 0,
 				Nonce:   0,
 			}
 			if err := s.db.Create(&wallet).Error; err != nil {
