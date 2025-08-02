@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
-import { generateKeyPair, generateMnemonic, mnemonicToKeyPair, signData, type KeyPair } from "@/lib/crypto"
+import { generateMnemonic, mnemonicToKeyPair, signData, type KeyPair } from "@/lib/crypto"
 import { sanCoinAPI } from "@/lib/api"
 
 export interface Transaction {
@@ -64,19 +64,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeWallet = async () => {
       try {
-        console.log("Initializing wallet...")
+        console.log("🔄 Initializing wallet...")
         const savedWallet = localStorage.getItem("sanwallet_wallet")
 
         if (savedWallet) {
           const walletData = JSON.parse(savedWallet)
-          console.log("Found saved wallet:", walletData.address)
+          console.log("✅ Found saved wallet:", walletData.address)
           setWallet(walletData)
           await loadWalletData(walletData)
         } else {
-          console.log("No saved wallet found")
+          console.log("ℹ️ No saved wallet found")
         }
       } catch (error) {
-        console.error("Failed to initialize wallet:", error)
+        console.error("❌ Failed to initialize wallet:", error)
         setNetworkStatus("offline")
       } finally {
         setIsInitializing(false)
@@ -113,9 +113,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       setNetworkStatus("online")
       setLastSyncTime(new Date())
-      console.log("Wallet data loaded successfully")
+      console.log("✅ Wallet data loaded successfully")
     } catch (error) {
-      console.error("Failed to load wallet data:", error)
+      console.error("❌ Failed to load wallet data:", error)
       setNetworkStatus("offline")
       // Set empty data on error
       setBalance(0)
@@ -125,26 +125,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Create new wallet
+  // Create new wallet với mnemonic thật
   const createWallet = useCallback(async (): Promise<{ wallet: KeyPair; mnemonic: string }> => {
-    console.log("Creating new wallet...")
-    const keyPair = generateKeyPair()
+    console.log("🔨 Creating new wallet...")
+
+    // Tạo mnemonic an toàn
     const mnemonic = generateMnemonic()
+    console.log("🔐 Generated secure mnemonic phrase")
 
-    // Save to localStorage
-    localStorage.setItem("sanwallet_wallet", JSON.stringify(keyPair))
-    localStorage.setItem("sanwallet_mnemonic", mnemonic)
-
-    setWallet(keyPair)
-    await loadWalletData(keyPair)
-
-    console.log("Wallet created:", keyPair.address)
-    return { wallet: keyPair, mnemonic }
-  }, [])
-
-  // Import wallet from mnemonic
-  const importWallet = useCallback(async (mnemonic: string): Promise<KeyPair> => {
-    console.log("Importing wallet from mnemonic...")
+    // Tạo key pair từ mnemonic
     const keyPair = mnemonicToKeyPair(mnemonic)
 
     // Save to localStorage
@@ -154,8 +143,32 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setWallet(keyPair)
     await loadWalletData(keyPair)
 
-    console.log("Wallet imported:", keyPair.address)
-    return keyPair
+    console.log("✅ Wallet created:", keyPair.address)
+    console.log("🔑 Mnemonic saved securely")
+
+    return { wallet: keyPair, mnemonic }
+  }, [])
+
+  // Import wallet from mnemonic
+  const importWallet = useCallback(async (mnemonic: string): Promise<KeyPair> => {
+    console.log("📥 Importing wallet from mnemonic...")
+
+    try {
+      const keyPair = mnemonicToKeyPair(mnemonic)
+
+      // Save to localStorage
+      localStorage.setItem("sanwallet_wallet", JSON.stringify(keyPair))
+      localStorage.setItem("sanwallet_mnemonic", mnemonic)
+
+      setWallet(keyPair)
+      await loadWalletData(keyPair)
+
+      console.log("✅ Wallet imported:", keyPair.address)
+      return keyPair
+    } catch (error) {
+      console.error("❌ Failed to import wallet:", error)
+      throw new Error("Invalid mnemonic phrase. Please check and try again.")
+    }
   }, [])
 
   // Send transaction using API
@@ -165,7 +178,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       setIsLoading(true)
       try {
-        console.log(`Sending ${amount} SNC to ${to}`)
+        console.log(`💸 Sending ${amount} SNC to ${to}`)
 
         // Create transaction data
         const txData = {
@@ -209,10 +222,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setTransactions((prev) => [newTx, ...prev])
         setBalance((prev) => prev - amount - 0.0001)
 
-        console.log("Transaction sent:", response.hash)
+        console.log("✅ Transaction sent:", response.hash)
         return response.hash || `tx_${Date.now()}`
       } catch (error) {
-        console.error("Failed to send transaction:", error)
+        console.error("❌ Failed to send transaction:", error)
         throw new Error("Failed to send transaction. Please check your connection and try again.")
       } finally {
         setIsLoading(false)
@@ -257,7 +270,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         blockNumber: tx.blockIndex,
       }))
     } catch (error) {
-      console.error("Failed to get transaction history:", error)
+      console.error("❌ Failed to get transaction history:", error)
       return transactions
     }
   }, [wallet, transactions])

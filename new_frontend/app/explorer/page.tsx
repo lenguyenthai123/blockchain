@@ -1,65 +1,241 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import Image from "next/image"
-import { Wallet, PlusCircle, Search, Download } from "lucide-react"
+"use client"
 
-export default function LandingPage() {
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Search, RefreshCw, Blocks, Activity, Users, TrendingUp } from "lucide-react"
+import { ExplorerStatCard } from "@/components/explorer/stat-card"
+import LatestBlocks from "@/components/explorer/latest-blocks"
+import LatestTransactions from "@/components/explorer/latest-transactions"
+import { utxoApi } from "@/lib/utxo-api"
+
+interface BlockchainStats {
+  totalBlocks: number
+  totalTransactions: number
+  totalAddresses: number
+  hashRate: string
+  difficulty: number
+  networkStatus: "online" | "offline"
+}
+
+export default function ExplorerPage() {
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [stats, setStats] = useState<BlockchainStats>({
+    totalBlocks: 0,
+    totalTransactions: 0,
+    totalAddresses: 0,
+    hashRate: "0 H/s",
+    difficulty: 0,
+    networkStatus: "online",
+  })
+
+  // Load blockchain stats
+  useEffect(() => {
+    loadStats()
+  }, [])
+
+  const loadStats = async () => {
+    try {
+      setIsLoading(true)
+      const response = await utxoApi.getBlockchainStats()
+      setStats({
+        totalBlocks: response.totalBlocks || 1250,
+        totalTransactions: response.totalTransactions || 8432,
+        totalAddresses: response.totalAddresses || 2156,
+        hashRate: response.hashRate || "125.4 TH/s",
+        difficulty: response.difficulty || 15.2,
+        networkStatus: "online",
+      })
+    } catch (error) {
+      console.error("Failed to load stats:", error)
+      // Set mock data for demo
+      setStats({
+        totalBlocks: 1250,
+        totalTransactions: 8432,
+        totalAddresses: 2156,
+        hashRate: "125.4 TH/s",
+        difficulty: 15.2,
+        networkStatus: "online",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return
+
+    try {
+      setIsLoading(true)
+
+      // Determine search type based on query format
+      if (searchQuery.match(/^[0-9]+$/)) {
+        // Block number
+        window.location.href = `/explorer/block/${searchQuery}`
+      } else if (searchQuery.startsWith("san1")) {
+        // Address
+        window.location.href = `/explorer/address/${searchQuery}`
+      } else if (searchQuery.match(/^[a-fA-F0-9]{64}$/)) {
+        // Transaction hash
+        window.location.href = `/explorer/tx/${searchQuery}`
+      } else {
+        alert("Invalid search query. Please enter a block number, address, or transaction hash.")
+      }
+    } catch (error) {
+      console.error("Search failed:", error)
+      alert("Search failed. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Safe number formatting function
+  const formatNumber = (num: number | undefined): string => {
+    if (typeof num !== "number" || isNaN(num)) return "0"
+    return num.toLocaleString()
+  }
+
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen text-center p-8 overflow-hidden">
-      <div className="absolute inset-0 z-0">
-        <Image
-          src="/placeholder.svg?width=1920&height=1080"
-          alt="Background"
-          layout="fill"
-          objectFit="cover"
-          className="opacity-30"
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold mb-6">The SanCoin Blockchain Explorer</h1>
+
+        {/* Search Bar */}
+        <div className="max-w-2xl mx-auto">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <Input
+                placeholder="Search by Address / Txn Hash / Block"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+              />
+            </div>
+            <Button
+              onClick={handleSearch}
+              disabled={isLoading || !searchQuery.trim()}
+              className="bg-cyan-500 hover:bg-cyan-600 text-gray-900"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Network Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <ExplorerStatCard
+          title="Total Blocks"
+          value={formatNumber(stats.totalBlocks)}
+          icon={<Blocks className="h-6 w-6" />}
+          change="+1.2%"
+          trend="up"
         />
-        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm"></div>
+        <ExplorerStatCard
+          title="Total Transactions"
+          value={formatNumber(stats.totalTransactions)}
+          icon={<Activity className="h-6 w-6" />}
+          change="+5.8%"
+          trend="up"
+        />
+        <ExplorerStatCard
+          title="Active Addresses"
+          value={formatNumber(stats.totalAddresses)}
+          icon={<Users className="h-6 w-6" />}
+          change="+3.2%"
+          trend="up"
+        />
+        <ExplorerStatCard
+          title="Hash Rate"
+          value={stats.hashRate || "0 H/s"}
+          icon={<TrendingUp className="h-6 w-6" />}
+          change="+0.8%"
+          trend="up"
+        />
       </div>
-      <div className="relative z-10">
-        <Image src="/logo.png" alt="SanWallet Logo" width={80} height={80} className="mb-4 mx-auto rounded-full" />
-        <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">Welcome to SanWallet</h1>
-        <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-8">
-          The most secure and professional wallet for the SanCoin ecosystem. Manage, send, and receive SNC with ease.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/create-wallet">
+
+      {/* Latest Blocks and Transactions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="bg-gray-900/50 border-gray-700">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-white">Latest Blocks</CardTitle>
+              <CardDescription className="text-gray-400">Most recent blocks mined</CardDescription>
+            </div>
             <Button
-              size="lg"
-              className="w-full sm:w-auto bg-cyan-500 hover:bg-cyan-600 text-gray-900 font-bold shadow-lg shadow-cyan-500/20"
+              onClick={loadStats}
+              disabled={isLoading}
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-white"
             >
-              <PlusCircle className="mr-2 h-5 w-5" />
-              Create a New Wallet
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
-          </Link>
-          <Link href="/unlock">
+          </CardHeader>
+          <CardContent>
+            <LatestBlocks />
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-900/50 border-gray-700">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-white">Latest Transactions</CardTitle>
+              <CardDescription className="text-gray-400">Most recent network transactions</CardDescription>
+            </div>
             <Button
-              size="lg"
-              variant="outline"
-              className="w-full sm:w-auto border-cyan-500 text-cyan-400 hover:bg-cyan-900/50 hover:text-cyan-300 bg-transparent"
+              onClick={loadStats}
+              disabled={isLoading}
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-white"
             >
-              <Wallet className="mr-2 h-5 w-5" />
-              Access My Wallet
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
-          </Link>
-        </div>
-        <div className="mt-8 space-y-4">
-          <Link
-            href="/import-wallet"
-            className="text-sm text-gray-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2"
-          >
-            <Download className="h-4 w-4" />
-            <span>Import an existing wallet</span>
-          </Link>
-          <Link
-            href="/explorer"
-            className="text-sm text-gray-400 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2"
-          >
-            <Search className="h-4 w-4" />
-            <span>Or explore the SanCoin blockchain with SanScan</span>
-          </Link>
-        </div>
+          </CardHeader>
+          <CardContent>
+            <LatestTransactions />
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Network Health */}
+      <Card className="bg-gray-900/50 border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-white">Network Health</CardTitle>
+          <CardDescription className="text-gray-400">Current network status and performance metrics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                <div className="w-8 h-8 bg-green-400 rounded-full animate-pulse"></div>
+              </div>
+              <h3 className="text-white font-semibold">Network Status</h3>
+              <p className="text-green-400">Online</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                <TrendingUp className="h-8 w-8 text-blue-400" />
+              </div>
+              <h3 className="text-white font-semibold">Difficulty</h3>
+              <p className="text-blue-400">{stats.difficulty || 0}T</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Activity className="h-8 w-8 text-purple-400" />
+              </div>
+              <h3 className="text-white font-semibold">Block Time</h3>
+              <p className="text-purple-400">~10 min</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

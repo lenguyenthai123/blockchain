@@ -7,8 +7,28 @@ const nextConfig = {
         crypto: 'crypto-browserify',
         stream: 'stream-browserify',
         buffer: 'buffer',
+        util: 'util',
+        assert: 'assert',
+        url: 'url',
+        fs: false,
+        net: false,
+        tls: false,
       }
     }
+    
+    // Enable WebAssembly
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+      syncWebAssembly: true,
+    }
+    
+    // Handle .wasm files
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'webassembly/async',
+    })
+    
     return config
   },
   images: {

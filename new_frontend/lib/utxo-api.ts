@@ -36,10 +36,14 @@ export interface BlockchainStats {
   pendingTransactions: number
   totalTransactions: number
   totalUTXOs: number
+  totalAddresses: number
+  activeAddresses: number
+  hashRate: string
   networkHashRate: string
   averageBlockTime: string
   totalSupply: string
   circulatingSupply: number
+  latestBlock?: any
 }
 
 export interface TransactionData {
@@ -121,97 +125,24 @@ class UTXOSanCoinAPI {
       })
       return response
     } catch (error) {
-      // Mock response for development
-      console.log("Using mock transaction response")
-      return {
-        hash: "0x" + Math.random().toString(16).substring(2, 18),
-      }
+      console.error("Send transaction failed:", error)
+      throw error
     }
   }
 
   // Get transactions for address - NEW METHOD
   async getTransactions(address: string): Promise<{ transactions: any[] }> {
-    try {
-      return this.request(`/blockchain/address/${address}/transactions`)
-    } catch (error) {
-      // Mock response for development
-      console.log("Using mock transactions response")
-      return {
-        transactions: [
-          {
-            hash: "0x1234567890abcdef",
-            from: "0x1111111111111111",
-            to: address,
-            amount: 5.0,
-            fee: 0.0001,
-            timestamp: Date.now() - 86400000,
-            status: "confirmed",
-            blockNumber: 1,
-          },
-          {
-            hash: "0xabcdef1234567890",
-            from: address,
-            to: "0x2222222222222222",
-            amount: 2.5,
-            fee: 0.0001,
-            timestamp: Date.now() - 43200000,
-            status: "confirmed",
-            blockNumber: 2,
-          },
-        ],
-      }
-    }
+    return this.request(`/blockchain/address/${address}/transactions`)
   }
 
   // Get blockchain stats - NEW METHOD
   async getBlockchainStats(): Promise<BlockchainStats> {
-    try {
-      return this.request("/blockchain/stats")
-    } catch (error) {
-      // Mock response for development
-      console.log("Using mock blockchain stats")
-      return {
-        totalBlocks: 12345,
-        difficulty: 1.5,
-        pendingTransactions: 23,
-        totalTransactions: 98765,
-        totalUTXOs: 45678,
-        networkHashRate: "1.2 TH/s",
-        averageBlockTime: "10 min",
-        totalSupply: "21,000,000 SNC",
-        circulatingSupply: 18500000,
-      }
-    }
+    return this.request("/blockchain/network/stats")
   }
 
   // Get latest transactions - NEW METHOD
   async getLatestTransactions(limit = 10): Promise<any[]> {
-    try {
-      return this.request(`/blockchain/transactions/latest?limit=${limit}`)
-    } catch (error) {
-      // Mock response for development
-      console.log("Using mock latest transactions")
-      return [
-        {
-          hash: "0x1234567890abcdef",
-          from: "0x1111111111111111",
-          to: "0x2222222222222222",
-          amount: 5.0,
-          fee: 0.0001,
-          timestamp: Date.now() - 300000,
-          status: "confirmed",
-        },
-        {
-          hash: "0xabcdef1234567890",
-          from: "0x3333333333333333",
-          to: "0x4444444444444444",
-          amount: 2.5,
-          fee: 0.0001,
-          timestamp: Date.now() - 600000,
-          status: "confirmed",
-        },
-      ]
-    }
+    return this.request(`/blockchain/transactions/latest?limit=${limit}`)
   }
 
   // Get blockchain info
