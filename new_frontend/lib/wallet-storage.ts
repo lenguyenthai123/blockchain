@@ -1,170 +1,271 @@
-import { encryptWalletData, decryptWalletData, hashPassword, generateSalt, type EncryptedWallet } from "./security"
+import {
+  encryptWalletData,
+  decryptWalletData,
+  hashPassword,
+  generateSalt,
+  type WalletData,
+  type EncryptedWallet,
+} from "./security"
 import type { KeyPair } from "./crypto"
 
-export interface WalletStorage {
-  encryptedWallet: EncryptedWallet
-  passwordHash: string
-  passwordSalt: string
-  createdAt: number
-  lastAccess: number
-  version: string
+const STORAGE_KEYS = {
+  WALLET: "sanwallet_encrypted_wallet",
+  PASSWORD_HASH: "sanwallet_password_hash",
+  SALT: "sanwallet_salt",
+  SESSION: "sanwallet_session",
+  WALLET_INFO: "sanwallet_info",
 }
 
-export interface WalletSession {
-  wallet: KeyPair
-  mnemonic: string
-  unlockTime: number
-  sessionTimeout: number
-}
-
-const STORAGE_KEY = "sanwallet_secure_storage"
-const SESSION_KEY = "sanwallet_session"
 const SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes
 
+export interface WalletInfo {
+  hasWallet: boolean
+  createdAt: number
+  lastAccess: number
+  address?: string
+}
+
+export interface SessionData {
+  wallet: KeyPair
+  mnemonic: string
+  timestamp: number
+}
+
 export class SecureWalletStorage {
-  // Lưu wallet với mã hóa
+  // Save encrypted wallet to localStorage
   static saveWallet(wallet: KeyPair, mnemonic: string, password: string): void {
     try {
-      console.log("🔐 Encrypting and saving wallet...")
+      console.log("💾 Saving encrypted wallet to storage...")
 
-      const walletData = {
+      const walletData: WalletData = {
         wallet,
         mnemonic,
         createdAt: Date.now(),
       }
 
-      // Mã hóa wallet data
+      // Generate salt for password hashing
+      const salt = generateSalt()
+
+      // Hash password for verification
+      const passwordHash = hashPassword(password, salt)
+
+      // Encrypt wallet data
       const encryptedWallet = encryptWalletData(walletData, password)
 
-      // Tạo hash của password để verify sau này
-      const passwordSalt = generateSalt()
-      const passwordHash = hashPassword(password, passwordSalt)
+      // Save to localStorage
+      localStorage.setItem(STORAGE_KEYS.WALLET, JSON.stringify(encryptedWallet))
+      localStorage.setItem(STORAGE_KEYS.PASSWORD_HASH, passwordHash)
+      localStorage.setItem(STORAGE_KEYS.SALT, salt)
 
-      const storage: WalletStorage = {
-        encryptedWallet,
-        passwordHash,
-        passwordSalt,
+      // Save wallet info
+      const walletInfo: WalletInfo = {
+        hasWallet: true,
         createdAt: Date.now(),
         lastAccess: Date.now(),
-        version: "1.0.0",
+        address: wallet.address,
       }
+      localStorage.setItem(STORAGE_KEYS.WALLET_INFO, JSON.stringify(walletInfo))
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(storage))
-      console.log("✅ Wallet encrypted and saved successfully")
+      // Create session
+      this.createSession(wallet, mnemonic)
+
+      console.log("✅ Wallet saved and encrypted successfully")
     } catch (error) {
       console.error("❌ Failed to save wallet:", error)
       throw new Error("Failed to save wallet securely")
     }
   }
 
-  // Kiểm tra xem có wallet được lưu không
-  static hasWallet(): boolean {
-    return localStorage.getItem(STORAGE_KEY) !== null
-  }
-
-  // Verify password
-  static verifyPassword(password: string): boolean {
+  // Unlock wallet with password
+  static unlockWallet(password: string): WalletData | null {
     try {
-      const storageData = localStorage.getItem(STORAGE_KEY)
-      if (!storageData) return false
+      console.log("🔓 Attempting to unlock wallet...")
 
-      const storage: WalletStorage = JSON.parse(storageData)
-      const computedHash = hashPassword(password, storage.passwordSalt)
+      // Get stored data
+      const encryptedWalletStr = localStorage.getItem(STORAGE_KEYS.WALLET)
+      const storedPasswordHash = localStorage.getItem(STORAGE_KEYS.PASSWORD_HASH)
+      const salt = localStorage.getItem(STORAGE_KEYS.SALT)
 
-      return computedHash === storage.passwordHash
-    } catch (error) {
-      console.error("❌ Failed to verify password:", error)
-      return false
-    }
-  }
-
-  // Unlock wallet với password
-  static unlockWallet(password: string): { wallet: KeyPair; mnemonic: string } | null {
-    try {
-      console.log("🔓 Unlocking wallet...")
-
-      const storageData = localStorage.getItem(STORAGE_KEY)
-      if (!storageData) {
-        throw new Error("No wallet found")
+      if (!encryptedWalletStr || !storedPasswordHash || !salt) {
+        console.error("❌ Wallet data not found")
+        return null
       }
-
-      const storage: WalletStorage = JSON.parse(storageData)
 
       // Verify password
-      if (!this.verifyPassword(password)) {
-        throw new Error("Invalid password")
+      const passwordHash = hashPassword(password, salt)
+      if (passwordHash !== storedPasswordHash) {
+        console.error("❌ Invalid password")
+        return null
       }
 
-      // Giải mã wallet data
-      const decryptedData = decryptWalletData(storage.encryptedWallet, password)
+      // Decrypt wallet
+      const encryptedWallet: EncryptedWallet = JSON.parse(encryptedWalletStr)
+      const walletData = decryptWalletData(encryptedWallet, password)
 
-      // Update last access
-      storage.lastAccess = Date.now()
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(storage))
+      // Update last access time
+      this.updateLastAccess()
 
-      // Tạo session
-      const session: WalletSession = {
-        wallet: decryptedData.wallet,
-        mnemonic: decryptedData.mnemonic,
-        unlockTime: Date.now(),
-        sessionTimeout: SESSION_TIMEOUT,
-      }
-
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      // Create session
+      this.createSession(walletData.wallet, walletData.mnemonic)
 
       console.log("✅ Wallet unlocked successfully")
-      return {
-        wallet: decryptedData.wallet,
-        mnemonic: decryptedData.mnemonic,
-      }
+      return walletData
     } catch (error) {
       console.error("❌ Failed to unlock wallet:", error)
       return null
     }
   }
 
-  // Lấy wallet từ session (nếu chưa timeout)
-  static getSessionWallet(): { wallet: KeyPair; mnemonic: string } | null {
+  // Create session for unlocked wallet
+  static createSession(wallet: KeyPair, mnemonic: string): void {
+    const sessionData: SessionData = {
+      wallet,
+      mnemonic,
+      timestamp: Date.now(),
+    }
+
+    sessionStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(sessionData))
+    console.log("🔑 Session created")
+  }
+
+  // Get session wallet (if not expired)
+  static getSessionWallet(): SessionData | null {
     try {
-      const sessionData = sessionStorage.getItem(SESSION_KEY)
-      if (!sessionData) return null
+      const sessionStr = sessionStorage.getItem(STORAGE_KEYS.SESSION)
+      if (!sessionStr) return null
 
-      const session: WalletSession = JSON.parse(sessionData)
+      const sessionData: SessionData = JSON.parse(sessionStr)
 
-      // Kiểm tra timeout
-      if (Date.now() - session.unlockTime > session.sessionTimeout) {
+      // Check if session expired
+      if (Date.now() - sessionData.timestamp > SESSION_TIMEOUT) {
+        console.log("⏰ Session expired")
         this.clearSession()
         return null
       }
 
-      return {
-        wallet: session.wallet,
-        mnemonic: session.mnemonic,
-      }
+      return sessionData
     } catch (error) {
-      console.error("❌ Failed to get session wallet:", error)
+      console.error("❌ Failed to get session:", error)
       return null
     }
   }
 
-  // Xóa session
+  // Clear session
   static clearSession(): void {
-    sessionStorage.removeItem(SESSION_KEY)
-    console.log("🧹 Session cleared")
+    sessionStorage.removeItem(STORAGE_KEYS.SESSION)
+    console.log("🗑️ Session cleared")
   }
 
-  // Đổi password
-  static changePassword(oldPassword: string, newPassword: string): boolean {
-    try {
-      console.log("🔄 Changing password...")
+  // Check if wallet exists
+  static hasWallet(): boolean {
+    return localStorage.getItem(STORAGE_KEYS.WALLET) !== null
+  }
 
-      // Unlock với password cũ
-      const walletData = this.unlockWallet(oldPassword)
-      if (!walletData) {
-        throw new Error("Invalid old password")
+  // Get wallet info
+  static getWalletInfo(): WalletInfo {
+    try {
+      const infoStr = localStorage.getItem(STORAGE_KEYS.WALLET_INFO)
+      if (!infoStr) {
+        return {
+          hasWallet: false,
+          createdAt: 0,
+          lastAccess: 0,
+        }
       }
 
-      // Lưu lại với password mới
+      return JSON.parse(infoStr)
+    } catch (error) {
+      console.error("❌ Failed to get wallet info:", error)
+      return {
+        hasWallet: false,
+        createdAt: 0,
+        lastAccess: 0,
+      }
+    }
+  }
+
+  // Update last access time
+  static updateLastAccess(): void {
+    try {
+      const walletInfo = this.getWalletInfo()
+      if (walletInfo.hasWallet) {
+        walletInfo.lastAccess = Date.now()
+        localStorage.setItem(STORAGE_KEYS.WALLET_INFO, JSON.stringify(walletInfo))
+      }
+    } catch (error) {
+      console.error("❌ Failed to update last access:", error)
+    }
+  }
+
+  // Delete wallet (for forgot password)
+  static deleteWallet(): void {
+    try {
+      console.log("🗑️ Deleting wallet data...")
+
+      // Remove all wallet data
+      localStorage.removeItem(STORAGE_KEYS.WALLET)
+      localStorage.removeItem(STORAGE_KEYS.PASSWORD_HASH)
+      localStorage.removeItem(STORAGE_KEYS.SALT)
+      localStorage.removeItem(STORAGE_KEYS.WALLET_INFO)
+
+      // Clear session
+      this.clearSession()
+
+      console.log("✅ Wallet deleted successfully")
+    } catch (error) {
+      console.error("❌ Failed to delete wallet:", error)
+      throw new Error("Failed to delete wallet")
+    }
+  }
+
+  // Export wallet (for backup)
+  static exportWallet(password: string): string | null {
+    try {
+      const walletData = this.unlockWallet(password)
+      if (!walletData) return null
+
+      return JSON.stringify({
+        wallet: walletData.wallet,
+        mnemonic: walletData.mnemonic,
+        createdAt: walletData.createdAt,
+        exportedAt: Date.now(),
+      })
+    } catch (error) {
+      console.error("❌ Failed to export wallet:", error)
+      return null
+    }
+  }
+
+  // Import wallet from backup
+  static importWallet(backupData: string, newPassword: string): boolean {
+    try {
+      const data = JSON.parse(backupData)
+
+      if (!data.wallet || !data.mnemonic) {
+        throw new Error("Invalid backup data")
+      }
+
+      this.saveWallet(data.wallet, data.mnemonic, newPassword)
+      return true
+    } catch (error) {
+      console.error("❌ Failed to import wallet:", error)
+      return false
+    }
+  }
+
+  // Change password
+  static changePassword(oldPassword: string, newPassword: string): boolean {
+    try {
+      console.log("🔄 Changing wallet password...")
+
+      // Unlock with old password
+      const walletData = this.unlockWallet(oldPassword)
+      if (!walletData) {
+        console.error("❌ Invalid old password")
+        return false
+      }
+
+      // Save with new password
       this.saveWallet(walletData.wallet, walletData.mnemonic, newPassword)
 
       console.log("✅ Password changed successfully")
@@ -172,63 +273,6 @@ export class SecureWalletStorage {
     } catch (error) {
       console.error("❌ Failed to change password:", error)
       return false
-    }
-  }
-
-  // Xóa wallet (khi quên password)
-  static deleteWallet(): void {
-    try {
-      console.log("🗑️ Deleting wallet...")
-
-      localStorage.removeItem(STORAGE_KEY)
-      this.clearSession()
-
-      // Xóa các dữ liệu khác
-      localStorage.removeItem("sanwallet_wallet")
-      localStorage.removeItem("sanwallet_mnemonic")
-
-      console.log("✅ Wallet deleted successfully")
-    } catch (error) {
-      console.error("❌ Failed to delete wallet:", error)
-    }
-  }
-
-  // Export wallet (cần password)
-  static exportWallet(password: string): string | null {
-    try {
-      const walletData = this.unlockWallet(password)
-      if (!walletData) return null
-
-      const exportData = {
-        wallet: walletData.wallet,
-        mnemonic: walletData.mnemonic,
-        exportedAt: Date.now(),
-        version: "1.0.0",
-      }
-
-      return JSON.stringify(exportData, null, 2)
-    } catch (error) {
-      console.error("❌ Failed to export wallet:", error)
-      return null
-    }
-  }
-
-  // Get wallet info (không cần password)
-  static getWalletInfo(): { createdAt: number; lastAccess: number; hasWallet: boolean } {
-    try {
-      const storageData = localStorage.getItem(STORAGE_KEY)
-      if (!storageData) {
-        return { createdAt: 0, lastAccess: 0, hasWallet: false }
-      }
-
-      const storage: WalletStorage = JSON.parse(storageData)
-      return {
-        createdAt: storage.createdAt,
-        lastAccess: storage.lastAccess,
-        hasWallet: true,
-      }
-    } catch (error) {
-      return { createdAt: 0, lastAccess: 0, hasWallet: false }
     }
   }
 }

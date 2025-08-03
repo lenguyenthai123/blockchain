@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "crypto"
+// import { mnemonicToSeedSync, generateMnemonic as bip39GenerateMnemonic, validateMnemonic as bip39ValidateMnemonic } from 'bip39'
 
 export interface KeyPair {
   address: string
@@ -2162,4 +2163,18 @@ export function createWalletFromMnemonic(mnemonic: string): KeyPair {
 // Wallet interface for compatibility
 export interface Wallet extends KeyPair {
   mnemonic?: string
+}
+
+// export function validateMnemonic function from bip39
+export function validateMnemonic(mnemonic: string): boolean {
+  const words = mnemonic.trim().split(/\s+/)
+  if (words.length !== 12) {
+    return false
+  }
+  for (const word of words) {
+    if (!BIP39_WORDLIST.includes(word.toLowerCase())) {
+      return false
+    }
+  }
+  return true
 }

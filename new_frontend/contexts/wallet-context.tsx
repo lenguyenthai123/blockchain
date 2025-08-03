@@ -2,8 +2,10 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
-import { generateMnemonic, mnemonicToKeyPair, signData, type KeyPair } from "@/lib/crypto"
+import { generateMnemonic, mnemonicToKeyPair, type KeyPair } from "@/lib/crypto"
 import { sanCoinAPI } from "@/lib/api"
+import { SecureWalletStorage } from "@/lib/wallet-storage"
+import { TransactionSigner, type UnsignedTransaction } from "@/lib/transaction-signer"
 
 export interface Transaction {
   hash: string
@@ -27,12 +29,18 @@ export interface WalletContextType {
   networkStatus: "online" | "offline" | "syncing"
   lastSyncTime: Date | null
   isOnline: boolean
+  isLocked: boolean
 
   // Wallet actions
-  createWallet: () => Promise<{ wallet: KeyPair; mnemonic: string }>
-  importWallet: (mnemonic: string) => Promise<KeyPair>
+  createWallet: (password: string) => Promise<{ wallet: KeyPair; mnemonic: string }>
+  importWallet: (mnemonic: string, password: string) => Promise<KeyPair>
+    loginWithMnemonic: (mnemonic: string, password: string) => Promise<boolean>
+
+  unlockWallet: (password: string) => Promise<boolean>
+  lockWallet: () => void
   sendTransaction: (to: string, amount: number) => Promise<string>
   refreshAll: () => Promise<void>
+  setWalletFromStorage: (wallet: KeyPair, mnemonic: string) => void
 
   // Utility functions
   getPortfolioValue: () => number
@@ -59,25 +67,36 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [networkStatus, setNetworkStatus] = useState<"online" | "offline" | "syncing">("offline")
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
+  const [isLocked, setIsLocked] = useState(true)
 
-  // Initialize wallet from localStorage
+  // Initialize wallet from session or storage
   useEffect(() => {
     const initializeWallet = async () => {
       try {
         console.log("🔄 Initializing wallet...")
-        const savedWallet = localStorage.getItem("sanwallet_wallet")
 
-        if (savedWallet) {
-          const walletData = JSON.parse(savedWallet)
-          console.log("✅ Found saved wallet:", walletData.address)
-          setWallet(walletData)
-          await loadWalletData(walletData)
+        // Kiểm tra session trước
+        const sessionWallet = SecureWalletStorage.getSessionWallet()
+        if (sessionWallet) {
+          console.log("✅ Found active session")
+          setWallet(sessionWallet.wallet)
+          setIsLocked(false)
+          await loadWalletData(sessionWallet.wallet)
         } else {
-          console.log("ℹ️ No saved wallet found")
+          // Kiểm tra có wallet được lưu không
+          const hasWallet = SecureWalletStorage.hasWallet()
+          if (hasWallet) {
+            console.log("🔒 Wallet found but locked")
+            setIsLocked(true)
+          } else {
+            console.log("ℹ️ No wallet found")
+            setIsLocked(false)
+          }
         }
       } catch (error) {
         console.error("❌ Failed to initialize wallet:", error)
         setNetworkStatus("offline")
+        setIsLocked(true)
       } finally {
         setIsInitializing(false)
       }
@@ -117,7 +136,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("❌ Failed to load wallet data:", error)
       setNetworkStatus("offline")
-      // Set empty data on error
       setBalance(0)
       setTransactions([])
     } finally {
@@ -125,8 +143,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Create new wallet với mnemonic thật
-  const createWallet = useCallback(async (): Promise<{ wallet: KeyPair; mnemonic: string }> => {
+  // Create new wallet với password
+  const createWallet = useCallback(async (password: string): Promise<{ wallet: KeyPair; mnemonic: string }> => {
     console.log("🔨 Creating new wallet...")
 
     // Tạo mnemonic an toàn
@@ -136,31 +154,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Tạo key pair từ mnemonic
     const keyPair = mnemonicToKeyPair(mnemonic)
 
-    // Save to localStorage
-    localStorage.setItem("sanwallet_wallet", JSON.stringify(keyPair))
-    localStorage.setItem("sanwallet_mnemonic", mnemonic)
+    // Lưu với mã hóa
+    SecureWalletStorage.saveWallet(keyPair, mnemonic, password)
 
     setWallet(keyPair)
+    setIsLocked(false)
     await loadWalletData(keyPair)
 
     console.log("✅ Wallet created:", keyPair.address)
-    console.log("🔑 Mnemonic saved securely")
-
     return { wallet: keyPair, mnemonic }
   }, [])
 
-  // Import wallet from mnemonic
-  const importWallet = useCallback(async (mnemonic: string): Promise<KeyPair> => {
+  // Import wallet from mnemonic với password
+  const importWallet = useCallback(async (mnemonic: string, password: string): Promise<KeyPair> => {
     console.log("📥 Importing wallet from mnemonic...")
 
     try {
       const keyPair = mnemonicToKeyPair(mnemonic)
 
-      // Save to localStorage
-      localStorage.setItem("sanwallet_wallet", JSON.stringify(keyPair))
-      localStorage.setItem("sanwallet_mnemonic", mnemonic)
+      // Lưu với mã hóa
+      SecureWalletStorage.saveWallet(keyPair, mnemonic, password)
 
       setWallet(keyPair)
+      setIsLocked(false)
       await loadWalletData(keyPair)
 
       console.log("✅ Wallet imported:", keyPair.address)
@@ -171,24 +187,62 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Send transaction using API
+  // Unlock wallet với password
+  const unlockWallet = useCallback(async (password: string): Promise<boolean> => {
+    console.log("🔓 Unlocking wallet...")
+
+    try {
+      const walletData = SecureWalletStorage.unlockWallet(password)
+      if (!walletData) {
+        console.error("❌ Invalid password")
+        return false
+      }
+
+      setWallet(walletData.wallet)
+      setIsLocked(false)
+      await loadWalletData(walletData.wallet)
+
+      console.log("✅ Wallet unlocked successfully")
+      return true
+    } catch (error) {
+      console.error("❌ Failed to unlock wallet:", error)
+      return false
+    }
+  }, [])
+
+  // Lock wallet
+  const lockWallet = useCallback(() => {
+    console.log("🔒 Locking wallet...")
+    SecureWalletStorage.clearSession()
+    setWallet(null)
+    setIsLocked(true)
+    setBalance(0)
+    setTransactions([])
+    console.log("✅ Wallet locked")
+  }, [])
+
+  // Set wallet from storage (for unlock page)
+  const setWalletFromStorage = useCallback((walletData: KeyPair, mnemonic: string) => {
+    setWallet(walletData)
+    setIsLocked(false)
+    loadWalletData(walletData)
+  }, [])
+
+  // Send transaction với signing phía frontend
   const sendTransaction = useCallback(
     async (to: string, amount: number): Promise<string> => {
       if (!wallet) throw new Error("No wallet connected")
 
       setIsLoading(true)
       try {
-        console.log(`💸 Sending ${amount} SNC to ${to}`)
+        console.log(`💸 Preparing to send ${amount} SNC to ${to}`)
 
-        // Create transaction data
-        const txData = {
-          hash: "", // Will be generated by backend
+        // Tạo unsigned transaction
+        const unsignedTx: UnsignedTransaction = {
           inputs: [
             {
-              previousTxHash: "",
+              previousTxHash: "", // Backend sẽ tìm UTXO phù hợp
               outputIndex: 0,
-              signature: signData(`${wallet.address}${to}${amount}${Date.now()}`, wallet.privateKey),
-              publicKey: wallet.publicKey,
               sequence: 0,
             },
           ],
@@ -196,7 +250,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             {
               amount: amount,
               address: to,
-              scriptPubKey: "",
+              scriptPubKey: TransactionSigner.createScriptPubKey(to),
             },
           ],
           timestamp: Date.now(),
@@ -204,12 +258,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           minerAddress: wallet.address,
         }
 
-        // Submit signed transaction
-        const response = await sanCoinAPI.submitSignedTransaction(txData)
+        // Sign transaction phía frontend
+        const signedTx = TransactionSigner.signTransaction(unsignedTx, wallet.privateKey, wallet.publicKey)
+
+        // Verify signature trước khi gửi
+        if (!TransactionSigner.verifyTransactionSignature(signedTx)) {
+          throw new Error("Transaction signature verification failed")
+        }
+
+        // Gửi signed transaction xuống backend
+        const response = await sanCoinAPI.submitSignedTransaction(signedTx)
 
         // Add to local transactions
         const newTx: Transaction = {
-          hash: response.hash || `tx_${Date.now()}`,
+          hash: response.hash || signedTx.hash,
           from: wallet.address,
           to,
           amount,
@@ -223,7 +285,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setBalance((prev) => prev - amount - 0.0001)
 
         console.log("✅ Transaction sent:", response.hash)
-        return response.hash || `tx_${Date.now()}`
+        return response.hash || signedTx.hash
       } catch (error) {
         console.error("❌ Failed to send transaction:", error)
         throw new Error("Failed to send transaction. Please check your connection and try again.")
@@ -240,9 +302,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     await loadWalletData(wallet)
   }, [wallet])
 
-  // Get portfolio value (using real price from API if available)
+  // Get portfolio value
   const getPortfolioValue = useCallback(() => {
-    const sncPrice = 125.5 // This should come from a price API in production
+    const sncPrice = 125.5
     return balance * sncPrice
   }, [balance])
 
@@ -303,12 +365,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     networkStatus,
     lastSyncTime,
     isOnline,
+    isLocked,
 
     // Actions
     createWallet,
     importWallet,
+    unlockWallet,
+    lockWallet,
     sendTransaction,
     refreshAll,
+    setWalletFromStorage,
 
     // Utilities
     getPortfolioValue,
