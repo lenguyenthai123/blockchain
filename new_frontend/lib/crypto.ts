@@ -1,10 +1,10 @@
-import { createHash, randomBytes } from "crypto"
-// import { mnemonicToSeedSync, generateMnemonic as bip39GenerateMnemonic, validateMnemonic as bip39ValidateMnemonic } from 'bip39'
+import { createHash, randomBytes, pbkdf2Sync } from "crypto"
+import * as secp256k1 from "secp256k1"
 
 export interface KeyPair {
-  address: string
-  publicKey: string
   privateKey: string
+  publicKey: string
+  address: string
 }
 
 // BIP39 wordlist (2048 words) - sử dụng subset an toàn
@@ -2073,14 +2073,14 @@ export function generatePrivateKey(): string {
   return randomBytes(32).toString("hex")
 }
 
-// Derive public key from private key (simplified)
+// Derive public key from private key - tạo compressed public key (33 bytes)
 export function privateKeyToPublicKey(privateKey: string): string {
-  const hash = createHash("sha256").update(privateKey).digest("hex")
-  return hash
+  const privateKeyBuffer = Buffer.from(privateKey, "hex")
+  const publicKey = secp256k1.publicKeyCreate(privateKeyBuffer, true) // compressed = true
+  return Buffer.from(publicKey).toString("hex")
 }
 
-// Generate address from public key
-export function publicKeyToAddress(publicKey: string): string {
+function generateAddress(publicKey: Uint8Array) {
   const hash = createHash("sha256").update(publicKey).digest("hex")
   return "SNC" + hash.substring(0, 32)
 }
@@ -2089,24 +2089,20 @@ export function publicKeyToAddress(publicKey: string): string {
 export function generateKeyPair(): KeyPair {
   const privateKey = generatePrivateKey()
   const publicKey = privateKeyToPublicKey(privateKey)
-  const address = publicKeyToAddress(publicKey)
+  const address = generateAddress(Buffer.from(publicKey, "hex"))
 
   return {
-    address,
-    publicKey,
     privateKey,
+    publicKey,
+    address,
   }
 }
 
-// Generate secure mnemonic phrase (12 words from BIP39 wordlist)
+// Generate secure mnemonic phrase (simplified - in production use BIP39)
 export function generateMnemonic(): string {
   const mnemonic = []
-
-  // Sử dụng crypto-secure random để chọn 12 từ
   for (let i = 0; i < 12; i++) {
-    // Tạo random bytes an toàn
-    const randomBuffer = randomBytes(2)
-    const randomIndex = randomBuffer.readUInt16BE(0) % BIP39_WORDLIST.length
+    const randomIndex = randomBytes(1)[0] % BIP39_WORDLIST.length
     mnemonic.push(BIP39_WORDLIST[randomIndex])
   }
 
@@ -2115,49 +2111,101 @@ export function generateMnemonic(): string {
 
 // Convert mnemonic to key pair
 export function mnemonicToKeyPair(mnemonic: string): KeyPair {
-  // Validate mnemonic có đúng 12 từ
-  const words = mnemonic.trim().split(/\s+/)
-  if (words.length !== 12) {
-    throw new Error("Mnemonic must contain exactly 12 words")
-  }
+  // Create seed from mnemonic
+  const seed = createHash("sha256").update(mnemonic.toLowerCase()).digest()
+  let privateKey = seed
 
-  // Validate tất cả từ có trong wordlist
-  for (const word of words) {
-    if (!BIP39_WORDLIST.includes(word.toLowerCase())) {
-      throw new Error(`Invalid word in mnemonic: ${word}`)
-    }
-  }
+  // Generate public key from private key (compressed)
+  const publicKey = secp256k1.publicKeyCreate(privateKey, true) // compressed = true
 
-  // Tạo seed từ mnemonic
-  const seed = createHash("sha256").update(mnemonic.toLowerCase()).digest("hex")
-  const privateKey = seed.substring(0, 64)
-  const publicKey = privateKeyToPublicKey(privateKey)
-  const address = publicKeyToAddress(publicKey)
+  // Generate address from public key
+  const address = generateAddress(publicKey)
 
   return {
+    privateKey: privateKey.toString("hex"),
+    publicKey: Buffer.from(publicKey).toString("hex"),
     address,
-    publicKey,
-    privateKey,
   }
 }
 
-// Sign data with private key
-export function signData(data: string, privateKey: string): string {
-  const hash = createHash("sha256")
-    .update(data + privateKey)
-    .digest("hex")
-  return hash
+// Sign data with private key - sử dụng secp256k1
+export function signData(message: string, privateKeyHex: string): string {
+  try {
+    console.log("🔐 Signing message:", {
+      message,
+      messageLength: message.length,
+      privateKeyLength: privateKeyHex.length,
+    })
+
+    // Convert message to hash
+    const messageHash = createHash("sha256").update(message, "utf8").digest()
+
+    // Convert private key from hex
+    const privateKey = Buffer.from(privateKeyHex, "hex")
+
+    // Validate private key length
+    if (privateKey.length !== 32) {
+      throw new Error(`Invalid private key length: ${privateKey.length}, expected 32 bytes`)
+    }
+
+    // Sign the hash using secp256k1
+    const signature = secp256k1.ecdsaSign(messageHash, privateKey)
+
+    // Return signature as hex string (64 bytes = 128 hex chars)
+    const signatureHex = Buffer.from(signature.signature).toString("hex")
+
+    console.log("✅ Message signed:", {
+      messageHash: messageHash.toString("hex"),
+      signatureHex,
+      signatureLength: signatureHex.length,
+    })
+
+    return signatureHex
+  } catch (error) {
+    console.error("❌ Failed to sign message:", error)
+    if (error instanceof Error) {
+      throw new Error(`Failed to sign message: ${error.message}`)
+    } else {
+      throw new Error("Failed to sign message: Unknown error")
+    }
+  }
 }
 
 // Verify signature
-export function verifySignature(data: string, signature: string, publicKey: string): boolean {
-  // Simplified verification - in production use proper cryptographic verification
-  return signature.length === 64
-}
+export function verifySignature(message: string, signature: string, publicKeyHex: string): boolean {
+  try {
+    console.log("🔍 Verifying signature:", {
+      message,
+      signatureLength: signature.length,
+      publicKeyLength: publicKeyHex.length,
+    })
+    const messageHash = createHash("sha256").update(message, "utf8").digest()
+    const publicKey = Buffer.from(publicKeyHex, "hex")
+    const signatureBuffer = Buffer.from(signature, "hex")
 
-// Create wallet from mnemonic (alias for compatibility)
-export function createWalletFromMnemonic(mnemonic: string): KeyPair {
-  return mnemonicToKeyPair(mnemonic)
+    console.log("Lengths:", {
+      messageHashLength: messageHash.length,
+      publicKeyLength: publicKey.length,
+      signatureLength: signatureBuffer.length,
+    })
+
+    // Validate public key length (must be 33 or 65 bytes)
+    if (publicKey.length !== 33 && publicKey.length !== 65) {
+      console.error("Invalid public key length:", publicKey.length)
+      return false
+    }
+
+    // Validate signature length (must be 64 bytes)
+    if (signatureBuffer.length !== 64) {
+      console.error("Invalid signature length:", signatureBuffer.length)
+      return false
+    }
+
+    return secp256k1.ecdsaVerify(signatureBuffer, messageHash, publicKey)
+  } catch (error) {
+    console.error("❌ Failed to verify signature:", error)
+    return false
+  }
 }
 
 // Wallet interface for compatibility

@@ -34,7 +34,6 @@ export interface WalletContextType {
   // Wallet actions
   createWallet: (password: string) => Promise<{ wallet: KeyPair; mnemonic: string }>
   importWallet: (mnemonic: string, password: string) => Promise<KeyPair>
-    loginWithMnemonic: (mnemonic: string, password: string) => Promise<boolean>
 
   unlockWallet: (password: string) => Promise<boolean>
   lockWallet: () => void
@@ -187,6 +186,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+
   // Unlock wallet với password
   const unlockWallet = useCallback(async (password: string): Promise<boolean> => {
     console.log("🔓 Unlocking wallet...")
@@ -237,58 +237,78 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       try {
         console.log(`💸 Preparing to send ${amount} SNC to ${to}`)
 
-        // Tạo unsigned transaction
+        // Bước 1: Tạo transaction template từ backend
+        console.log("📋 Creating transaction template...")
+        const transactionTemplate = await sanCoinAPI.createTransaction(wallet.address, to, amount)
+
+        console.log("✅ Transaction template created:", transactionTemplate)
+
+        // Bước 2: Tạo unsigned transaction từ template
         const unsignedTx: UnsignedTransaction = {
-          inputs: [
-            {
-              previousTxHash: "", // Backend sẽ tìm UTXO phù hợp
-              outputIndex: 0,
-              sequence: 0,
-            },
-          ],
-          outputs: [
-            {
-              amount: amount,
-              address: to,
-              scriptPubKey: TransactionSigner.createScriptPubKey(to),
-            },
-          ],
+          inputs: transactionTemplate.inputs.map((input: any) => ({
+            previousTxHash: input.previousTxHash,
+            outputIndex: input.outputIndex,
+            sequence: input.sequence || 0,
+          })),
+          outputs: transactionTemplate.outputs,
           timestamp: Date.now(),
           type: "transfer",
           minerAddress: wallet.address,
         }
 
-        // Sign transaction phía frontend
+        console.log("📝 Unsigned transaction prepared:", unsignedTx)
+
+        // Bước 3: Sign transaction phía frontend
+        console.log("🖊️ Signing transaction...")
         const signedTx = TransactionSigner.signTransaction(unsignedTx, wallet.privateKey, wallet.publicKey)
 
-        // Verify signature trước khi gửi
+        // Bước 4: Verify signature trước khi gửi
         if (!TransactionSigner.verifyTransactionSignature(signedTx)) {
           throw new Error("Transaction signature verification failed")
         }
 
-        // Gửi signed transaction xuống backend
+        console.log("✅ Transaction signed and verified")
+
+        // Bước 5: Gửi signed transaction xuống backend để mining
+        console.log("⛏️ Submitting signed transaction for mining...")
         const response = await sanCoinAPI.submitSignedTransaction(signedTx)
 
-        // Add to local transactions
+        console.log("🎉 Transaction mined successfully:", response)
+
+        // Bước 6: Update local state
         const newTx: Transaction = {
-          hash: response.hash || signedTx.hash,
+          hash: response.transactionHash || signedTx.hash,
           from: wallet.address,
           to,
           amount,
-          fee: 0.0001,
+          fee: transactionTemplate.fee || 0.001,
           timestamp: Date.now(),
-          status: "pending",
+          status: "confirmed", // Vì đã được mine ngay lập tức
           type: "send",
+          blockNumber: response.blockIndex,
         }
 
         setTransactions((prev) => [newTx, ...prev])
-        setBalance((prev) => prev - amount - 0.0001)
 
-        console.log("✅ Transaction sent:", response.hash)
-        return response.hash || signedTx.hash
+        // Update balance với change amount từ template
+        const totalSpent = amount + (transactionTemplate.fee || 0.001)
+        setBalance((prev) => prev - totalSpent)
+
+        console.log("✅ Transaction completed successfully")
+        return response.transactionHash || signedTx.hash
       } catch (error) {
         console.error("❌ Failed to send transaction:", error)
-        throw new Error("Failed to send transaction. Please check your connection and try again.")
+
+        // Provide more specific error messages
+        if (error.message.includes("Insufficient funds")) {
+          throw new Error("Insufficient funds. Please check your balance and try again.")
+        } else if (error.message.includes("No UTXOs available")) {
+          throw new Error("No available funds to spend. Please wait for previous transactions to confirm.")
+        } else if (error.message.includes("Invalid address")) {
+          throw new Error("Invalid recipient address. Please check and try again.")
+        } else {
+          throw new Error("Failed to send transaction. Please check your connection and try again.")
+        }
       } finally {
         setIsLoading(false)
       }

@@ -1,6 +1,5 @@
 import { createHash } from "crypto"
-import { signData } from "./crypto"
-
+import { signData,verifySignature } from "./crypto"
 export interface TransactionInput {
   previousTxHash: string
   outputIndex: number
@@ -52,13 +51,29 @@ export class TransactionSigner {
   static signTransaction(unsignedTx: UnsignedTransaction, privateKey: string, publicKey: string): SignedTransaction {
     console.log("🖊️ Signing transaction on frontend...")
 
+    // Validate public key format (should be 33 bytes compressed = 66 hex chars)
+    // if (publicKey.length !== 66) {
+    //   throw new Error(
+    //     `Invalid public key length: ${publicKey.length}, expected 66 hex characters (33 bytes compressed)`,
+    //   )
+    // }
+
     // Tạo hash cho transaction
     const txHash = this.createTransactionHash(unsignedTx)
 
     // Sign từng input
     const signedInputs: TransactionInput[] = unsignedTx.inputs.map((input, index) => {
-      // Tạo message để sign (bao gồm tx hash và input index)
-      const messageToSign = `${txHash}:${input.previousTxHash}:${input.outputIndex}:${index}`
+      // Tạo message để sign GIỐNG HỆT với backend
+      // Backend: this.hash + input.previousTxHash + input.outputIndex
+      const messageToSign = txHash + input.previousTxHash + input.outputIndex.toString()
+
+      console.log(`🔐 Signing input ${index}:`, {
+        txHash,
+        previousTxHash: input.previousTxHash,
+        outputIndex: input.outputIndex,
+        messageToSign,
+        publicKeyLength: publicKey.length,
+      })
 
       // Sign message với private key
       const signature = signData(messageToSign, privateKey)
@@ -67,7 +82,7 @@ export class TransactionSigner {
         previousTxHash: input.previousTxHash,
         outputIndex: input.outputIndex,
         signature,
-        publicKey,
+        publicKey, // Đảm bảo public key là compressed format (66 hex chars)
         sequence: input.sequence,
       }
     })
@@ -81,7 +96,14 @@ export class TransactionSigner {
       minerAddress: unsignedTx.minerAddress,
     }
 
-    console.log("✅ Transaction signed successfully:", txHash)
+    console.log("✅ Transaction signed successfully:", {
+      hash: txHash,
+      inputsCount: signedInputs.length,
+      outputsCount: unsignedTx.outputs.length,
+      firstSignatureLength: signedInputs[0]?.signature?.length,
+      firstPublicKeyLength: signedInputs[0]?.publicKey?.length,
+    })
+
     return signedTx
   }
 
@@ -104,24 +126,54 @@ export class TransactionSigner {
       // Verify hash
       const expectedHash = this.createTransactionHash(unsignedTx)
       if (expectedHash !== signedTx.hash) {
-        console.error("❌ Transaction hash mismatch")
+        console.error("❌ Transaction hash mismatch:", {
+          expected: expectedHash,
+          actual: signedTx.hash,
+        })
         return false
       }
 
-      // Verify each signature
+      // Verify each signature format
+      console.log("🔍 THAI DEBUG...")
       for (let i = 0; i < signedTx.inputs.length; i++) {
+        console.log("🔍 Verifying input:", i)
         const input = signedTx.inputs[i]
-        const messageToSign = `${signedTx.hash}:${input.previousTxHash}:${input.outputIndex}:${i}`
 
-        // In production, you would verify the signature against the public key
-        // For now, we just check if signature exists and has correct format
-        if (!input.signature || input.signature.length !== 64) {
-          console.error(`❌ Invalid signature for input ${i}`)
+        // Recreate message GIỐNG HỆT với backend
+        const messageToSign = signedTx.hash + input.previousTxHash + input.outputIndex.toString()
+        
+        console.log(`🔍 Verifying input ${i}:`, {
+          result: verifySignature(messageToSign, input.signature, input.publicKey),
+          hash: signedTx.hash,
+          previousTxHash: input.previousTxHash,
+          outputIndex: input.outputIndex,
+          messageToSign,
+          signatureLength: input.signature.length,
+          publicKeyLength: input.publicKey.length,
+        })
+
+        // Check signature format (128 hex chars = 64 bytes for secp256k1)
+        if (!input.signature || input.signature.length !== 128) {
+          console.error(`❌ Invalid signature format for input ${i}:`, {
+            signature: input.signature,
+            length: input.signature?.length,
+            expected: "128 hex characters (64 bytes)",
+          })
           return false
         }
+
+        // Check public key format (66 hex chars = 33 bytes compressed)
+        // if (!input.publicKey || input.publicKey.length !== 66) {
+        //   console.error(`❌ Invalid public key format for input ${i}:`, {
+        //     publicKey: input.publicKey,
+        //     length: input.publicKey?.length,
+        //     expected: "66 hex characters (33 bytes compressed)",
+        //   })
+        //   return false
+        // }
       }
 
-      console.log("✅ Transaction signature verified")
+      console.log("✅ Transaction signature format verified")
       return true
     } catch (error) {
       console.error("❌ Failed to verify transaction signature:", error)
