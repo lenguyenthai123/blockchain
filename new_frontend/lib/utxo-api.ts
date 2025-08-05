@@ -1,22 +1,16 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+import {generateAddress} from "./crypto"
+import { SecureWalletStorage } from "@/lib/wallet-storage"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
 
-export interface UTXO {
-  txHash: string
-  outputIndex: number
-  amount: number
-  address: string
-  scriptPubKey: string
-  blockHeight: number
-}
-
-export interface UTXOTransactionInput {
+export interface UTXOInput {
   previousTxHash: string
   outputIndex: number
   signature: string
   publicKey: string
+  sequence: number
 }
 
-export interface UTXOTransactionOutput {
+export interface UTXOOutput {
   amount: number
   address: string
   scriptPubKey: string
@@ -24,160 +18,234 @@ export interface UTXOTransactionOutput {
 
 export interface UTXOTransaction {
   hash: string
-  inputs: UTXOTransactionInput[]
-  outputs: UTXOTransactionOutput[]
+  inputs: UTXOInput[]
+  outputs: UTXOOutput[]
   timestamp: number
-  type: string
+  type: "transfer" | "coinbase"
+  blockIndex: number
+  blockHash: string
+  blockTimestamp: number
 }
 
-export interface BlockchainStats {
+export interface TransactionWithDirection extends UTXOTransaction {
+  direction: "sent" | "received" | "self"
+  netAmount: number
+  fee: number
+  counterpartyAddress: string
+}
+
+export interface NetworkStats {
+  totalSupply: number
+  circulatingSupply: number
+  totalTransactions: number
   totalBlocks: number
   difficulty: number
-  pendingTransactions: number
-  totalTransactions: number
-  totalUTXOs: number
-  totalAddresses: number
-  activeAddresses: number
   hashRate: string
-  networkHashRate: string
-  averageBlockTime: string
-  totalSupply: string
-  circulatingSupply: number
-  latestBlock?: any
+  blockTime: number
+  pendingTransactions: number
 }
 
-export interface TransactionData {
-  from: string
-  to: string
-  amount: number
-  fee: number
-  timestamp: number
+export interface AddressInfo {
+  address: string
+  balance: number
+  transactionCount: number
+  totalReceived: number
+  totalSent: number
 }
 
-class UTXOSanCoinAPI {
-  private async request(endpoint: string, options: RequestInit = {}) {
-    const url = `${API_BASE_URL}${endpoint}`
+export class SanCoinAPI {
+  private baseURL: string
+  // import this context: useWallet() should only be used inside React components or hooks, not here.
+  constructor(baseURL = "http://localhost:3001") {
+    this.baseURL = baseURL
+  }
 
-    const config: RequestInit = {
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      ...options,
-    }
-
+  async getBalance(address: string): Promise<number> {
     try {
-      const response = await fetch(url, config)
+      const response = await fetch(`${this.baseURL}/api/utxo/balance/${address}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      return data.balance || 0
+    } catch (error) {
+      console.error("Error fetching balance:", error)
+      return 0
+    }
+  }
+
+  async getUTXOs(address: string): Promise<any[]> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/utxo/utxos/${address}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      return data.utxos || []
+    } catch (error) {
+      console.error("Error fetching UTXOs:", error)
+      return []
+    }
+  }
+
+  async sendTransaction(transaction: any): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/utxo/transaction`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(transaction),
+      })
+
       const data = await response.json()
 
-      if (!data.success) {
-        throw new Error(data.error || "API request failed")
+      if (!response.ok) {
+        return { success: false, error: data.error || "Transaction failed" }
       }
 
-      return data.data
+      return { success: true, txHash: data.txHash }
     } catch (error) {
-      console.error(`API request failed for ${endpoint}:`, error)
-      throw error
+      console.error("Error sending transaction:", error)
+      return { success: false, error: "Network error" }
     }
   }
 
-  // Get UTXOs for address
-  async getUTXOs(address: string): Promise<UTXO[]> {
-    return this.request(`/blockchain/address/${address}/utxos`)
-  }
-
-  // Get balance (calculated from UTXOs)
-  async getBalance(address: string): Promise<{ address: string; balance: number }> {
-    return this.request(`/blockchain/balance/${address}`)
-  }
-
-  // Submit UTXO transaction
-  async submitUTXOTransaction(transaction: UTXOTransaction) {
-    return this.request("/blockchain/utxo-transaction", {
-      method: "POST",
-      body: JSON.stringify(transaction),
-    })
-  }
-
-  // Create transaction (helper method)
-  async createTransaction(fromAddress: string, toAddress: string, amount: number, utxos: UTXO[], privateKey: string) {
-    return this.request("/blockchain/create-transaction", {
-      method: "POST",
-      body: JSON.stringify({
-        fromAddress,
-        toAddress,
-        amount,
-        utxos,
-        privateKey,
-      }),
-    })
-  }
-
-  // Send transaction - NEW METHOD
-  async sendTransaction(transactionData: TransactionData, privateKey: string): Promise<{ hash: string }> {
+  async getTransaction(hash: string): Promise<UTXOTransaction | null> {
     try {
-      const response = await this.request("/blockchain/send-transaction", {
-        method: "POST",
-        body: JSON.stringify({
-          ...transactionData,
-          privateKey,
-        }),
-      })
-      return response
+      const response = await fetch(`${this.baseURL}/api/utxo/transaction/${hash}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      return data.transaction || null
     } catch (error) {
-      console.error("Send transaction failed:", error)
-      throw error
+      console.error("Error fetching transaction:", error)
+      return null
     }
   }
 
-  // Get transactions for address - NEW METHOD
-  async getTransactions(address: string): Promise<{ transactions: any[] }> {
-    return this.request(`/blockchain/address/${address}/transactions`)
+  async getTransactionHistory(address: string, limit = 50): Promise<TransactionWithDirection[]> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/blockchain/address/${address}/transactions?limit=${limit}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      const transactions: UTXOTransaction[] = data.data?.transactions || []
+
+      // Process transactions to determine direction and amounts
+      return transactions.map((tx) => this.processTransactionDirection(tx, address))
+    } catch (error) {
+      console.error("Error fetching transaction history:", error)
+      return []
+    }
   }
 
-  // Get blockchain stats - NEW METHOD
-  async getBlockchainStats(): Promise<BlockchainStats> {
-    return this.request("/blockchain/network/stats")
+  private processTransactionDirection(tx: UTXOTransaction, address: string): TransactionWithDirection {
+    const sessionWallet = SecureWalletStorage.getSessionWallet()
+    let userAddress: string | undefined = undefined
+    if (sessionWallet && sessionWallet.wallet && sessionWallet.wallet.address) {
+      userAddress = sessionWallet.wallet.address
+      console.log("Current wallet address:", userAddress)
+    }
+    // Get the address after wallet is loaded
+    // const userAddress = wallet?.address
+    let direction: "sent" | "received" | "self" = "received"
+    let netAmount = 0
+    let fee = 0
+    let counterpartyAddress = ""
+
+    const senderAddress = generateAddress(Buffer.from(tx.inputs[0]?.publicKey || "", "hex"))
+    console.log("Sender address:", senderAddress)
+    console.log("User address:", userAddress)
+    
+    if(userAddress === senderAddress) {
+      // User is the sender
+      direction = "sent"
+    }
+    else{
+      direction = "received"
+    }
+
+    if (tx.type === "coinbase") {
+      // Coinbase transaction - always received
+      netAmount = tx.outputs.find((output) => output.address === userAddress)?.amount || 0
+      counterpartyAddress = "Coinbase"
+    } else {
+      // Regular transfer transaction
+      const inputsFromUser = tx.inputs.filter((input) => {
+        // For regular transactions, we need to check if this input belongs to user
+        // This is complex without UTXO data, so we'll use a heuristic
+        return input.publicKey !== "" // User's inputs will have signatures
+      })
+
+      const outputsToUser = tx.outputs.filter((output) => output.address === userAddress)
+      const outputsFromUser = tx.outputs.filter((output) => output.address !== userAddress)
+
+      const totalReceived = outputsToUser.reduce((sum, output) => sum + output.amount, 0)
+      const totalSent = outputsFromUser.reduce((sum, output) => sum + output.amount, 0)
+
+
+      // Determine if user is sender or receiver
+      const userIsSender = userAddress === senderAddress
+      const userIsReceiver = userAddress !== senderAddress
+
+      if (userIsSender && userIsReceiver) {
+        // Self transaction or change
+        if (outputsFromUser.length === 0) {
+          netAmount = 0
+        } else {
+          netAmount = totalSent
+          fee = 0.001 // Estimated fee
+          counterpartyAddress = outputsFromUser[0]?.address || ""
+        }
+      } else if (userIsSender) {
+        netAmount = totalSent
+        fee = 0.001 // Estimated fee
+        counterpartyAddress = outputsFromUser[0]?.address || ""
+      } else if (userIsReceiver) {
+        netAmount = totalReceived
+        counterpartyAddress = senderAddress // We don't have sender info easily
+      }
+    }
+
+    return {
+      ...tx,
+      direction,
+      netAmount,
+      fee,
+      counterpartyAddress,
+    }
   }
 
-  // Get latest transactions - NEW METHOD
-  async getLatestTransactions(limit = 10): Promise<any[]> {
-    return this.request(`/blockchain/transactions/latest?limit=${limit}`)
+  async getAddressInfo(address: string): Promise<AddressInfo | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/utxo/address/${address}`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      return data.addressInfo || null
+    } catch (error) {
+      console.error("Error fetching address info:", error)
+      return null
+    }
   }
 
-  // Get blockchain info
-  async getBlockchainInfo() {
-    return this.request("/blockchain/info")
-  }
-
-  // Get transaction by hash
-  async getTransaction(hash: string) {
-    return this.request(`/blockchain/transaction/${hash}`)
-  }
-
-  // Get address transactions
-  async getAddressTransactions(address: string) {
-    return this.request(`/blockchain/address/${address}/transactions`)
-  }
-
-  // Get block info
-  async getBlock(index: number) {
-    return this.request(`/blockchain/block/${index}`)
-  }
-
-  // Get latest blocks
-  async getLatestBlocks(limit = 10) {
-    return this.request(`/blockchain/blocks/latest?limit=${limit}`)
-  }
-
-  // Mine block
-  async mineBlock(minerAddress: string) {
-    return this.request("/blockchain/mine", {
-      method: "POST",
-      body: JSON.stringify({ minerAddress }),
-    })
+  async getNetworkStats(): Promise<NetworkStats | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/utxo/stats`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      return data.stats || null
+    } catch (error) {
+      console.error("Error fetching network stats:", error)
+      return null
+    }
   }
 }
 
-export const utxoSanCoinAPI = new UTXOSanCoinAPI()
-export const utxoApi = utxoSanCoinAPI // Export alias for easier import
+export const sanCoinAPI = new SanCoinAPI()

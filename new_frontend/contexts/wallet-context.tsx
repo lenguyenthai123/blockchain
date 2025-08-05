@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect, useCallback } from "react"
-import { generateMnemonic, mnemonicToKeyPair, type KeyPair } from "@/lib/crypto"
+import { generateAddress,generateMnemonic, mnemonicToKeyPair, type KeyPair } from "@/lib/crypto"
 import { sanCoinAPI } from "@/lib/api"
 import { SecureWalletStorage } from "@/lib/wallet-storage"
 import { TransactionSigner, type UnsignedTransaction } from "@/lib/transaction-signer"
@@ -116,16 +116,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
       // Load transactions from API
       const txResponse = await sanCoinAPI.getAddressTransactions(walletData.address)
+
+      const publicKeyHex = txResponse.transactions?.[0]?.inputs?.[0]?.publicKey
+      // alert(
+      //   "Session address: " +
+      //     walletData.address +
+      //     "\n" +
+      //     (publicKeyHex ? generateAddress(Buffer.from(publicKeyHex, "hex")) : "No public key")
+      // )
+
       const formattedTxs: Transaction[] = txResponse.transactions.map((tx: any) => ({
         hash: tx.hash,
-        from: tx.inputs?.[0]?.address || tx.from || "unknown",
+        from: generateAddress(Buffer.from(tx?.inputs?.[0]?.publicKey, "hex")) || tx.from || "unknown",
         to: tx.outputs?.[0]?.address || tx.to || "unknown",
         amount: tx.outputs?.[0]?.amount || tx.amount || 0,
         fee: 0.0001,
         timestamp: tx.timestamp,
         status: "confirmed",
-        type: tx.inputs?.[0]?.address === walletData.address ? "send" : "receive",
+        type: generateAddress(Buffer.from(tx?.inputs?.[0]?.publicKey, "hex")) === walletData.address ? "send" : "receive",
         blockNumber: tx.blockIndex,
+        
       }))
       setTransactions(formattedTxs)
 

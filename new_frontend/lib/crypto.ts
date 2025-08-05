@@ -2080,7 +2080,7 @@ export function privateKeyToPublicKey(privateKey: string): string {
   return Buffer.from(publicKey).toString("hex")
 }
 
-function generateAddress(publicKey: Uint8Array) {
+export function generateAddress(publicKey: Uint8Array) {
   const hash = createHash("sha256").update(publicKey).digest("hex")
   return "SNC" + hash.substring(0, 32)
 }

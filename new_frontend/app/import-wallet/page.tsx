@@ -20,7 +20,7 @@ export default function ImportWalletPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
-  const { importWallet, loginWithMnemonic } = useWallet()
+  const { importWallet } = useWallet()
 
   const handlePhraseChange = (index: number, value: string) => {
     const newPhrase = [...phrase]

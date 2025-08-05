@@ -69,6 +69,9 @@ export function encryptWalletData(walletData: WalletData, password: string): Enc
 
 // Decrypt wallet data
 export function decryptWalletData(encryptedWallet: EncryptedWallet, password: string): WalletData {
+  if (typeof password !== "string") {
+    throw new TypeError("Password must be a string")
+  }
   const key = deriveKey(password, encryptedWallet.salt)
   const decryptedString = xorDecrypt(encryptedWallet.encryptedData, key)
 
@@ -78,7 +81,7 @@ export function decryptWalletData(encryptedWallet: EncryptedWallet, password: st
     throw new Error("Invalid password or corrupted data")
   }
 }
-
+  
 // Validate password strength - FIX: Export this function
 export function validatePassword(password: string): {
   isValid: boolean
