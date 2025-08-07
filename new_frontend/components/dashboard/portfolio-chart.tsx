@@ -3,9 +3,8 @@
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Dot } from "recharts"
+import { TrendingUp, TrendingDown, Minus, Activity, Coins, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 import { useWallet } from "@/contexts/wallet-context"
 import { sanCoinAPI, type TransactionWithDirection } from "@/lib/utxo-api"
 
@@ -14,38 +13,80 @@ interface BalancePoint {
   balance: number
   date: string
   time: string
+  txHash?: string
+  txType?: string
+  change?: number
 }
 
-type TimeRange = "24h" | "7d" | "30d" | "all"
+interface PortfolioStats {
+  change: number
+  changePercent: number
+  trend: "up" | "down" | "neutral"
+  totalTransactions: number
+  receivedCount: number
+  sentCount: number
+}
+
+const TIME_RANGES = [
+  { label: "24H", value: "24h", hours: 24 },
+  { label: "7D", value: "7d", hours: 24 * 7 },
+  { label: "30D", value: "30d", hours: 24 * 30 },
+  { label: "All", value: "all", hours: 0 },
+]
 
 export default function PortfolioChart() {
   const { wallet, balance } = useWallet()
   const [transactions, setTransactions] = useState<TransactionWithDirection[]>([])
-  const [timeRange, setTimeRange] = useState<TimeRange>("7d")
-  const [loading, setLoading] = useState(true)
+  const [selectedRange, setSelectedRange] = useState("7d")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Get wallet address
+  const address = wallet?.address
 
   useEffect(() => {
-    if (wallet?.address) {
+    if (address) {
       fetchTransactions()
     }
-  }, [wallet?.address])
+  }, [address])
 
   const fetchTransactions = async () => {
-    if (!wallet?.address) return
+    if (!address) return
 
     try {
-      setLoading(true)
-      const data = await sanCoinAPI.getTransactionHistory(wallet.address, 200)
+      setIsLoading(true)
+      setError(null)
+
+      console.log("📊 Fetching transactions for portfolio chart:", address)
+
+      // Fetch transactions with userAddress parameter for proper direction calculation
+      const data = await sanCoinAPI.getTransactionHistory(address, 200)
+
+      console.log("📊 Portfolio transactions loaded:", {
+        total: data.length,
+        address,
+        sample: data.slice(0, 3).map((tx) => ({
+          hash: tx.hash?.slice(0, 8),
+          direction: tx.direction,
+          netAmount: tx.netAmount,
+          type: tx.type,
+        })),
+      })
+
       setTransactions(data)
-    } catch (error) {
-      console.error("Error fetching transactions:", error)
+    } catch (err) {
+      console.error("❌ Failed to fetch transactions for portfolio:", err)
+      setError(err instanceof Error ? err.message : "Failed to fetch transactions")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
+  // Calculate balance history from transactions
   const balanceHistory = useMemo(() => {
-    if (!transactions.length) return []
+    if (!transactions.length || !address) return []
+
+    console.log("📈 Calculating balance history for:", address)
 
     // Sort transactions by timestamp (oldest first)
     const sortedTxs = [...transactions].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
@@ -72,121 +113,115 @@ export default function PortfolioChart() {
       }
 
       runningBalance += balanceChange
+      runningBalance = Math.max(0, runningBalance) // Safety check
 
-      // Ensure balance never goes negative (safety check)
-      runningBalance = Math.max(0, runningBalance)
+      const date = new Date(tx.timestamp || 0)
 
-      const date = new Date(tx.timestamp)
+      // Store balance point with transaction info
       history.push({
-        timestamp: tx.timestamp,
+        timestamp: tx.timestamp || 0,
         balance: runningBalance,
         date: date.toLocaleDateString(),
         time: date.toLocaleTimeString(),
+        txHash: tx.hash,
+        txType: tx.type,
+        change: balanceChange, // Track the change for this transaction
+      })
+
+      console.log(`📊 Transaction ${index + 1}:`, {
+        hash: tx.hash?.slice(0, 8),
+        type: tx.type,
+        direction: tx.direction,
+        netAmount: tx.netAmount,
+        fee: tx.fee,
+        balanceChange,
+        runningBalance,
       })
     })
 
-    // Add current balance as the latest point
-    if (history.length > 0) {
-      const now = new Date()
+    // Add current balance as the latest point if we have transactions
+    if (history.length > 0 && balance !== runningBalance) {
       history.push({
-        timestamp: now.getTime(),
+        timestamp: Date.now(),
         balance: balance,
-        date: now.toLocaleDateString(),
-        time: now.toLocaleTimeString(),
-      })
-    } else if (balance > 0) {
-      // If no transactions but we have balance, show current balance
-      const now = new Date()
-      history.push({
-        timestamp: now.getTime(),
-        balance: balance,
-        date: now.toLocaleDateString(),
-        time: now.toLocaleTimeString(),
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        change: balance - runningBalance,
       })
     }
 
-    return history
-  }, [transactions, balance])
+    console.log("📈 Balance history calculated:", {
+      totalPoints: history.length,
+      startBalance: history[0]?.balance || 0,
+      endBalance: history[history.length - 1]?.balance || 0,
+      currentBalance: balance,
+    })
 
+    return history
+  }, [transactions, balance, address])
+
+  // Filter history by selected time range
   const filteredHistory = useMemo(() => {
     if (!balanceHistory.length) return []
 
-    const now = Date.now()
-    let cutoffTime = 0
+    const range = TIME_RANGES.find((r) => r.value === selectedRange)
+    if (!range || range.value === "all") return balanceHistory
 
-    switch (timeRange) {
-      case "24h":
-        cutoffTime = now - 24 * 60 * 60 * 1000
-        break
-      case "7d":
-        cutoffTime = now - 7 * 24 * 60 * 60 * 1000
-        break
-      case "30d":
-        cutoffTime = now - 30 * 24 * 60 * 60 * 1000
-        break
-      case "all":
-        return balanceHistory
+    const cutoffTime = Date.now() - range.hours * 60 * 60 * 1000
+
+    // Find the last point before cutoff time
+    const beforeCutoff = balanceHistory.filter((point) => point.timestamp < cutoffTime)
+    const afterCutoff = balanceHistory.filter((point) => point.timestamp >= cutoffTime)
+
+    let filtered: BalancePoint[] = []
+
+    // If we have points before cutoff, use the last one as starting point
+    if (beforeCutoff.length > 0) {
+      const lastBeforeCutoff = beforeCutoff[beforeCutoff.length - 1]
+      // Create a synthetic point at cutoff time with the last known balance
+      filtered.push({
+        ...lastBeforeCutoff,
+        timestamp: cutoffTime,
+        date: new Date(cutoffTime).toLocaleDateString(),
+        time: new Date(cutoffTime).toLocaleTimeString(),
+      })
     }
 
-    // Filter points within the time range
-    const filtered = balanceHistory.filter((point) => point.timestamp >= cutoffTime)
+    // Add all points after cutoff
+    filtered = [...filtered, ...afterCutoff]
 
-    // If no points in range, find the last point before cutoff to use as starting point
+    // If no points in range, create points with current balance
     if (filtered.length === 0) {
-      const lastPointBefore = balanceHistory.filter((point) => point.timestamp < cutoffTime).slice(-1)[0]
-
-      if (lastPointBefore) {
-        // Create a synthetic starting point at the cutoff time with the last known balance
-        const startDate = new Date(cutoffTime)
-        const startPoint: BalancePoint = {
+      const now = Date.now()
+      filtered = [
+        {
           timestamp: cutoffTime,
-          balance: lastPointBefore.balance,
-          date: startDate.toLocaleDateString(),
-          time: startDate.toLocaleTimeString(),
-        }
-        return [startPoint]
-      }
-      return []
-    }
-
-    // If we have filtered points but the first one is after cutoff,
-    // add a starting point with the balance from before the cutoff
-    if (filtered.length > 0 && filtered[0].timestamp > cutoffTime) {
-      const lastPointBefore = balanceHistory.filter((point) => point.timestamp < cutoffTime).slice(-1)[0]
-
-      if (lastPointBefore) {
-        const startDate = new Date(cutoffTime)
-        const startPoint: BalancePoint = {
-          timestamp: cutoffTime,
-          balance: lastPointBefore.balance,
-          date: startDate.toLocaleDateString(),
-          time: startDate.toLocaleTimeString(),
-        }
-        return [startPoint, ...filtered]
-      }
+          balance: balance,
+          date: new Date(cutoffTime).toLocaleDateString(),
+          time: new Date(cutoffTime).toLocaleTimeString(),
+        },
+        {
+          timestamp: now,
+          balance: balance,
+          date: new Date(now).toLocaleDateString(),
+          time: new Date(now).toLocaleTimeString(),
+        },
+      ]
     }
 
     return filtered
-  }, [balanceHistory, timeRange])
+  }, [balanceHistory, selectedRange, balance])
 
-  const stats = useMemo(() => {
-    if (filteredHistory.length === 0) {
+  // Calculate portfolio statistics
+  const portfolioStats = useMemo((): PortfolioStats => {
+    if (!filteredHistory.length) {
       return {
         change: 0,
         changePercent: 0,
-        trend: "neutral" as const,
-        startBalance: balance,
-        endBalance: balance,
-      }
-    }
-
-    if (filteredHistory.length === 1) {
-      return {
-        change: 0,
-        changePercent: 0,
-        trend: "neutral" as const,
-        startBalance: filteredHistory[0].balance,
-        endBalance: filteredHistory[0].balance,
+        trend: "neutral",
+        totalTransactions: 0,
+        receivedCount: 0,
+        sentCount: 0,
       }
     }
 
@@ -195,61 +230,114 @@ export default function PortfolioChart() {
     const change = endBalance - startBalance
     const changePercent = startBalance > 0 ? (change / startBalance) * 100 : 0
 
+    // Determine trend
     let trend: "up" | "down" | "neutral" = "neutral"
     if (Math.abs(change) > 0.001) {
+      // Only consider significant changes
       trend = change > 0 ? "up" : "down"
     }
+
+    // Count transactions by type
+    const totalTransactions = transactions.length
+    const receivedCount = transactions.filter((tx) => tx.direction === "received" || tx.type === "coinbase").length
+    const sentCount = transactions.filter((tx) => tx.direction === "sent").length
 
     return {
       change,
       changePercent,
       trend,
-      startBalance,
-      endBalance,
+      totalTransactions,
+      receivedCount,
+      sentCount,
     }
-  }, [filteredHistory, balance])
+  }, [filteredHistory, transactions])
 
-  const formatBalance = (value: number) => {
-    return `${value.toFixed(3)} SNC`
-  }
-
-  const formatChange = (change: number, percent: number) => {
-    const sign = change >= 0 ? "+" : ""
-    return `${sign}${change.toFixed(3)} SNC (${sign}${percent.toFixed(2)}%)`
-  }
-
-  const getTrendIcon = () => {
-    switch (stats.trend) {
-      case "up":
-        return <TrendingUp className="h-4 w-4 text-green-400" />
-      case "down":
-        return <TrendingDown className="h-4 w-4 text-red-400" />
-      default:
-        return <Minus className="h-4 w-4 text-gray-400" />
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload
+      return (
+        <div className="bg-background border rounded-lg p-3 shadow-lg">
+          <p className="font-medium">{`Balance: ${payload[0].value.toFixed(4)} SNC`}</p>
+          <p className="text-sm text-muted-foreground">{`${data.date} ${data.time}`}</p>
+          {data.change && (
+            <p className={`text-sm ${data.change > 0 ? "text-green-600" : "text-red-600"}`}>
+              {`Change: ${data.change > 0 ? "+" : ""}${data.change.toFixed(4)} SNC`}
+            </p>
+          )}
+          {data.txHash && <p className="text-xs text-muted-foreground">{`Tx: ${data.txHash.slice(0, 8)}...`}</p>}
+        </div>
+      )
     }
+    return null
   }
 
-  const getTrendColor = () => {
-    switch (stats.trend) {
-      case "up":
-        return "text-green-400"
-      case "down":
-        return "text-red-400"
-      default:
-        return "text-gray-400"
+  const CustomDot = (props: any) => {
+    const { cx, cy, payload } = props
+    if (payload.txHash) {
+      return <Dot cx={cx} cy={cy} r={3} fill="#3b82f6" stroke="#1e40af" strokeWidth={2} />
     }
+    return null
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Balance</CardTitle>
-          <CardDescription>Track your balance over time</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Portfolio Performance
+          </CardTitle>
+          <CardDescription>Loading portfolio data...</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-64 bg-gray-800 rounded animate-pulse flex items-center justify-center">
-            <div className="text-gray-400">Loading chart data...</div>
+          <div className="h-[300px] flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+              <p className="text-sm text-muted-foreground">Loading transactions...</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Portfolio Performance
+          </CardTitle>
+          <CardDescription>Error loading portfolio data</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm text-red-600 mb-2">{error}</p>
+              <Button onClick={fetchTransactions} variant="outline" size="sm">
+                Retry
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!address) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Portfolio Performance
+          </CardTitle>
+          <CardDescription>Wallet not connected</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">Please connect your wallet to view portfolio performance</p>
           </div>
         </CardContent>
       </Card>
@@ -260,17 +348,20 @@ export default function PortfolioChart() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Balance</CardTitle>
-          <CardDescription>Track your balance over time</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Portfolio Performance
+          </CardTitle>
+          <CardDescription>No transaction data available</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-gray-500">
-            <div className="mb-4">
-              <div className="text-2xl font-bold text-gray-300">{formatBalance(balance)}</div>
-              <div className="text-sm text-gray-400">Current Balance</div>
+          <div className="h-[300px] flex items-center justify-center">
+            <div className="text-center">
+              <Coins className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground mb-1">No transactions found</p>
+              <p className="text-lg font-semibold">Current Balance: {balance.toFixed(4)} SNC</p>
+              <p className="text-xs text-muted-foreground mt-1">Address: {address}</p>
             </div>
-            <p>No transaction history available for this period</p>
-            <p className="text-sm mt-1">Your balance chart will appear here after transactions</p>
           </div>
         </CardContent>
       </Card>
@@ -282,113 +373,120 @@ export default function PortfolioChart() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Portfolio Balance</CardTitle>
-            <CardDescription>Track your balance over time</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Portfolio Performance
+            </CardTitle>
+            <CardDescription>
+              Track your balance changes over time • {address}
+            </CardDescription>
           </div>
-          <div className="flex gap-2">
-            {(["24h", "7d", "30d", "all"] as TimeRange[]).map((range) => (
+          <div className="flex gap-1">
+            {TIME_RANGES.map((range) => (
               <Button
-                key={range}
-                variant={timeRange === range ? "default" : "outline"}
+                key={range.value}
+                variant={selectedRange === range.value ? "default" : "outline"}
                 size="sm"
-                onClick={() => setTimeRange(range)}
-                className="text-xs"
+                onClick={() => setSelectedRange(range.value)}
               >
-                {range}
+                {range.label}
               </Button>
             ))}
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {/* Current Balance & Change */}
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold">{formatBalance(balance)}</div>
-              <div className={`flex items-center gap-1 text-sm ${getTrendColor()}`}>
-                {getTrendIcon()}
-                <span>{formatChange(stats.change, stats.changePercent)}</span>
-              </div>
+        {/* Portfolio Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              {portfolioStats.trend === "up" && <TrendingUp className="h-4 w-4 text-green-600" />}
+              {portfolioStats.trend === "down" && <TrendingDown className="h-4 w-4 text-red-600" />}
+              {portfolioStats.trend === "neutral" && <Minus className="h-4 w-4 text-gray-600" />}
+              <span
+                className={`text-lg font-bold ${
+                  portfolioStats.trend === "up"
+                    ? "text-green-600"
+                    : portfolioStats.trend === "down"
+                      ? "text-red-600"
+                      : "text-gray-600"
+                }`}
+              >
+                {portfolioStats.change > 0 ? "+" : ""}
+                {portfolioStats.change.toFixed(4)}
+              </span>
             </div>
-            <Badge
-              variant={stats.trend === "up" ? "default" : stats.trend === "down" ? "destructive" : "secondary"}
-              className="text-xs"
+            <p className="text-xs text-muted-foreground">Change</p>
+            <p
+              className={`text-sm font-medium ${
+                portfolioStats.trend === "up"
+                  ? "text-green-600"
+                  : portfolioStats.trend === "down"
+                    ? "text-red-600"
+                    : "text-gray-600"
+              }`}
             >
-              {timeRange.toUpperCase()}
-            </Badge>
+              {portfolioStats.changePercent > 0 ? "+" : ""}
+              {portfolioStats.changePercent.toFixed(2)}%
+            </p>
           </div>
 
-          {/* Chart */}
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={filteredHistory} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis
-                  dataKey="date"
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `${value.toFixed(1)}`}
-                  domain={["dataMin - 0.1", "dataMax + 0.1"]}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload as BalancePoint
-                      return (
-                        <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg">
-                          <p className="text-sm text-gray-400">
-                            {data.date} at {data.time}
-                          </p>
-                          <p className="text-lg font-semibold text-cyan-400">{formatBalance(data.balance)}</p>
-                        </div>
-                      )
-                    }
-                    return null
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="balance"
-                  stroke="#06B6D4"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, stroke: "#06B6D4", strokeWidth: 2, fill: "#06B6D4" }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <Activity className="h-4 w-4 text-blue-600" />
+              <span className="text-lg font-bold">{portfolioStats.totalTransactions}</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Total Transactions</p>
           </div>
 
-          {/* Summary Stats */}
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800">
-            <div>
-              <p className="text-sm text-gray-400">Period Start</p>
-              <p className="font-semibold">{formatBalance(stats.startBalance)}</p>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <ArrowDownLeft className="h-4 w-4 text-green-600" />
+              <span className="text-lg font-bold text-green-600">{portfolioStats.receivedCount}</span>
             </div>
-            <div>
-              <p className="text-sm text-gray-400">Period End</p>
-              <p className="font-semibold">{formatBalance(stats.endBalance)}</p>
-            </div>
+            <p className="text-xs text-muted-foreground">Received</p>
           </div>
 
-          {/* Debug Info (can be removed in production) */}
-          {process.env.NODE_ENV === "development" && (
-            <div className="text-xs text-gray-500 pt-2 border-t border-gray-800">
-              <p>Transactions: {transactions.length}</p>
-              <p>History Points: {balanceHistory.length}</p>
-              <p>Filtered Points: {filteredHistory.length}</p>
-              <p>Current Balance: {balance}</p>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <ArrowUpRight className="h-4 w-4 text-red-600" />
+              <span className="text-lg font-bold text-red-600">{portfolioStats.sentCount}</span>
             </div>
-          )}
+            <p className="text-xs text-muted-foreground">Sent</p>
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={filteredHistory} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+              <XAxis
+                dataKey="timestamp"
+                type="number"
+                scale="time"
+                domain={["dataMin", "dataMax"]}
+                tickFormatter={(timestamp) => new Date(timestamp).toLocaleDateString()}
+                interval="preserveStartEnd"
+              />
+              <YAxis domain={["dataMin - 0.1", "dataMax + 0.1"]} tickFormatter={(value) => `${value.toFixed(2)}`} />
+              <Tooltip content={<CustomTooltip />} />
+              <Line
+                type="monotone"
+                dataKey="balance"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={<CustomDot />}
+                activeDot={{ r: 6, stroke: "#1e40af", strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Current Balance */}
+        <div className="mt-4 text-center">
+          <p className="text-sm text-muted-foreground">Current Balance</p>
+          <p className="text-2xl font-bold">{balance.toFixed(4)} SNC</p>
         </div>
       </CardContent>
     </Card>

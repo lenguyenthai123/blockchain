@@ -126,7 +126,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-white">My Wallet</CardTitle>
-              <CardDescription className="text-gray-300">{formatAddress(wallet.address)}</CardDescription>
+              <CardDescription className="text-gray-300">{wallet.address}</CardDescription>
             </div>
             <Button
               onClick={() => navigator.clipboard.writeText(wallet.address)}
