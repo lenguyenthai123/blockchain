@@ -27,6 +27,26 @@ function getDataArray<T = any>(payload: any): T[] {
   if (Array.isArray(payload?.data)) return payload.data as T[]
   return []
 }
+export interface BackendStats {
+  totalBlocks: number
+  difficulty: number
+  pendingTransactions: number
+  totalTransactions: number
+  totalUTXOs: number
+  latestBlock: {
+    index: number
+    hash: string
+    previousHash: string
+    merkleRoot: string
+    timestamp: number
+    nonce: number
+    difficulty: number
+  }
+  networkHashRate: string
+  averageBlockTime: string
+  totalSupply: string
+  circulatingSupply: number
+}
 
 export interface BlockTxItem {
   hash: string
@@ -136,9 +156,9 @@ export const explorerApi = {
     return getDataArray<any>(payload)
   },
 
-  async getStats() {
-    const payload = await request<Json>(`/api/blockchain/stats`)
-    return getDataObject<any>(payload)
+async getStats(): Promise<BackendStats> {
+    const payload = await request<Json>("/api/blockchain/stats")
+    return getDataObject<BackendStats>(payload)
   },
     async getAddressBalance(address: string): Promise<AddressBalance> {
     const payload = await request<Json>(`/api/blockchain/balance/${address}`)
