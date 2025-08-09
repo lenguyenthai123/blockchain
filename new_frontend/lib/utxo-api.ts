@@ -262,14 +262,10 @@ export class SanCoinAPI {
   }
 
   private processTransactionDirection(tx: UTXOTransaction, address: string): TransactionWithDirection {
-    const sessionWallet = SecureWalletStorage.getSessionWallet()
-    let userAddress: string | undefined = undefined
-    if (sessionWallet && sessionWallet.wallet && sessionWallet.wallet.address) {
-      userAddress = sessionWallet.wallet.address
-      console.log("Current wallet address:", userAddress)
-    }
+    const userAddress = address
     // Get the address after wallet is loaded
     // const userAddress = wallet?.address
+    
     let direction: "sent" | "received" | "self" = "received"
     let netAmount = 0
     let fee = 0

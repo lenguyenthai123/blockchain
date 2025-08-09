@@ -44,6 +44,42 @@ export interface BlockDetail {
   difficulty: number
   transactions: BlockTxItem[]
 }
+export interface TxInput {
+  previousTxHash: string
+  outputIndex: number
+  signature: string
+  publicKey?: string
+  sequence?: number
+}
+export interface AddressBalance {
+  address: string
+  balance: number
+}
+export interface TxOutput {
+  amount: number
+  address: string
+  scriptPubKey?: string
+}
+
+export interface TransactionDetail {
+  hash: string
+  inputs: TxInput[]
+  outputs: TxOutput[]
+  timestamp: number
+  type: string // "transfer" | "coinbase"
+}
+
+export interface TxBlockRef {
+  index: number
+  hash: string
+  timestamp: number
+}
+
+export interface TransactionByHash {
+  transaction: TransactionDetail
+  block: TxBlockRef
+  status: "confirmed" | "pending" | string
+}
 
 export const explorerApi = {
   async getBlockByIndex(index: number): Promise<BlockDetail> {
@@ -65,7 +101,30 @@ export const explorerApi = {
       })),
     }
   },
+  async getTransactionByHash(hash: string): Promise<TransactionByHash> {
+    const payload = await request<Json>(`/api/blockchain/transaction/${hash}`)
+    const data = getDataObject<any>(payload)
 
+    // Defensive normalization
+    const tx = data.transaction ?? {}
+    const block = data.block ?? {}
+
+    return {
+      transaction: {
+        hash: String(tx.hash ?? ""),
+        inputs: Array.isArray(tx.inputs) ? tx.inputs : [],
+        outputs: Array.isArray(tx.outputs) ? tx.outputs : [],
+        timestamp: Number(tx.timestamp ?? 0),
+        type: String(tx.type ?? "transfer"),
+      },
+      block: {
+        index: Number(block.index ?? 0),
+        hash: String(block.hash ?? ""),
+        timestamp: Number(block.timestamp ?? 0),
+      },
+      status: String(data.status ?? "pending"),
+    }
+  },
   // Optional helpers used elsewhere in Explorer
   async getLatestBlocks(limit = 5) {
     const payload = await request<Json>(`/api/blockchain/blocks/latest?limit=${limit}`)
@@ -81,4 +140,13 @@ export const explorerApi = {
     const payload = await request<Json>(`/api/blockchain/stats`)
     return getDataObject<any>(payload)
   },
+    async getAddressBalance(address: string): Promise<AddressBalance> {
+    const payload = await request<Json>(`/api/blockchain/balance/${address}`)
+    const data = getDataObject<AddressBalance>(payload)
+    return {
+      address: String(data.address ?? address),
+      balance: Number(data.balance ?? 0),
+    }
+  },
+
 }
