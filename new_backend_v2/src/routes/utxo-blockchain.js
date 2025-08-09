@@ -15,7 +15,7 @@ router.get("/address/:address/utxos", validateAddress, async (req, res) => {
       data: utxos,
     })
   } catch (error) {
-    req.logger.error("Error getting UTXOs:", error)
+    logger.error("Error getting UTXOs:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -39,7 +39,7 @@ router.get("/address/:address/balance", validateAddress, async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error getting balance:", error)
+    logger.error("Error getting balance:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -71,7 +71,7 @@ router.get("/network/stats", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error getting network stats:", error)
+    logger.error("Error getting network stats:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -91,7 +91,7 @@ router.get("/transactions/latest", async (req, res) => {
       data: transactions,
     })
   } catch (error) {
-    req.logger.error("Error getting latest transactions:", error)
+    logger.error("Error getting latest transactions:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -111,7 +111,7 @@ router.get("/blocks/latest", async (req, res) => {
       data: blocks,
     })
   } catch (error) {
-    req.logger.error("Error getting latest blocks:", error)
+    logger.error("Error getting latest blocks:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -159,7 +159,7 @@ router.post("/submit-signed-transaction", async (req, res) => {
         })
       }
 
-      req.logger.info("Processing signed transaction immediately (mine now):", {
+      logger.info("Processing signed transaction immediately (mine now):", {
         hash: transaction.hash,
         inputs: inputs.length,
         outputs: outputs.length,
@@ -168,7 +168,7 @@ router.post("/submit-signed-transaction", async (req, res) => {
 
       const result = await req.blockchain.processSignedTransaction(transaction, minerAddress)
 
-      req.logger.info("Transaction mined successfully:", {
+      logger.info("Transaction mined successfully:", {
         txHash: result.transactionHash,
         blockHash: result.blockHash,
         blockIndex: result.block.index,
@@ -191,7 +191,7 @@ router.post("/submit-signed-transaction", async (req, res) => {
     const fee = 0.001 // simple static fee; adjust as needed or make configurable
     const txHash = await req.blockchain.addTransactionToMempool(transaction, fee)
 
-    req.logger.info("Signed transaction added to mempool:", {
+    logger.info("Signed transaction added to mempool:", {
       hash: txHash,
       inputs: inputs.length,
       outputs: outputs.length,
@@ -205,7 +205,6 @@ router.post("/submit-signed-transaction", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error submitting signed transaction:", error)
     return res.status(400).json({
       success: false,
       error: error.message,
@@ -237,7 +236,7 @@ router.post("/utxo-transaction", async (req, res) => {
 
     const txHash = await req.blockchain.addTransactionToMempool(transaction, fee)
 
-    req.logger.info("UTXO transaction added to mempool:", { hash: txHash })
+    logger.info("UTXO transaction added to mempool:", { hash: txHash })
 
     res.json({
       success: true,
@@ -247,7 +246,7 @@ router.post("/utxo-transaction", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error submitting UTXO transaction:", error)
+    logger.error("Error submitting UTXO transaction:", error)
     res.status(400).json({
       success: false,
       error: error.message,
@@ -335,7 +334,7 @@ router.post("/create-transaction", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error creating transaction:", error)
+    logger.error("Error creating transaction:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -354,7 +353,7 @@ router.get("/utxo-stats", async (req, res) => {
       data: stats,
     })
   } catch (error) {
-    req.logger.error("Error getting UTXO stats:", error)
+    logger.error("Error getting UTXO stats:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -380,7 +379,7 @@ router.get("/transaction/:hash", async (req, res) => {
       data: result,
     })
   } catch (error) {
-    req.logger.error("Error getting transaction:", error)
+    logger.error("Error getting transaction:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -402,7 +401,7 @@ router.get("/address/:address/transactions", validateAddress, async (req, res) =
       },
     })
   } catch (error) {
-    req.logger.error("Error getting address transactions:", error)
+    logger.error("Error getting address transactions:", error)
     res.status(500).json({
       success: false,
       error: error.message,

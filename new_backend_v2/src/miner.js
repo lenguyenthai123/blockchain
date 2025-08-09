@@ -8,7 +8,7 @@
  *   MINER_ONCE=true                      (optional, run one cycle then exit)
  *   NODE_ENV=development|production      (optional)
  */
-require("dotenv").config()
+require("dotenv").config({ path: process.env.ENV_FILE || ".env" });
 
 // Support both default and commonjs export shapes.
 const ChainModule = require("./core/UTXOBlockchain")
@@ -68,7 +68,7 @@ async function main() {
   })
 
   const blockchain = new UTXOBlockchain()
-  await blockchain.initialize()
+  // await blockchain.initialize()
 
   const run = async () => {
     await attemptMine(blockchain, MINER_ADDRESS)

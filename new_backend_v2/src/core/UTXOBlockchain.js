@@ -6,7 +6,7 @@ const UTXOModel = require("../models/UTXOModel")
 
 class UTXOBlockchain {
   constructor() {
-    this.difficulty = 5
+    this.difficulty = 4
     this.miningReward = 10 // SNC
     this.initialized = false
   }
@@ -125,6 +125,134 @@ class UTXOBlockchain {
       totalValue,
       averageUTXOValue: totalUTXOs > 0 ? (totalValue / totalUTXOs).toFixed(4) : "0",
       largestUTXO: await UTXOModel.getLargestUTXO(),
+    }
+  }
+  // Accept a mined block from external miner (verify PoW, linkage, signatures)
+  async acceptMinedBlock(payload) {
+    await this.initialize()
+
+    const { index, timestamp, previousHash, nonce, hash, transactions, minerAddress } = payload || {}
+    if (
+      typeof index !== "number" ||
+      typeof timestamp !== "number" ||
+      typeof nonce !== "number" ||
+      typeof previousHash !== "string" ||
+      typeof hash !== "string" ||
+      !Array.isArray(transactions) ||
+      !minerAddress
+    ) {
+      throw new Error("Invalid block payload")
+    }
+
+    const latest = await this.getLatestBlock()
+    const expectedIndex = latest ? latest.index + 1 : 1
+    const expectedPrev = latest ? latest.hash : "0"
+    if (index !== expectedIndex) {
+      throw new Error(`Invalid index: got ${index}, expected ${expectedIndex}`)
+    }
+    if (previousHash !== expectedPrev) {
+      throw new Error(`Invalid previousHash: got ${previousHash}, expected ${expectedPrev}`)
+    }
+
+    // Rebuild transactions as UTXOTransaction instances
+    const txs = transactions.map((tx) => {
+      if (tx.type === "coinbase") {
+        return tx
+      }
+      const inputs = (tx.inputs || []).map(
+        (inp) => new TransactionInput(inp.previousTxHash, inp.outputIndex, inp.signature, inp.publicKey, inp.sequence),
+      )
+      const outputs = (tx.outputs || []).map((out) => new TransactionOutput(out.amount, out.address, out.scriptPubKey))
+      const utxoTx = new UTXOTransaction(inputs, outputs, tx.timestamp || Date.now())
+      utxoTx.hash = tx.hash
+      utxoTx.type = tx.type || "transfer"
+      return utxoTx
+    })
+
+    if (txs.length === 0 || txs[0].type !== "coinbase") {
+      throw new Error("Coinbase transaction missing or not first")
+    }
+    // Validate coinbase reward
+    const cbOutSum = txs[0].outputs.reduce((s, o) => s + Number(o.amount || 0), 0)
+    const cbAddrSet = new Set(txs[0].outputs.map((o) => o.address))
+    if (!cbAddrSet.has(minerAddress) || cbOutSum < this.miningReward) {
+      throw new Error("Invalid coinbase payout")
+    }
+
+    // Validate signatures and UTXOs availability (best-effort)
+    for (let t = 1; t < txs.length; t++) {
+      const tx = txs[t]
+      if (typeof tx.isValid === "function" && !tx.isValid()) {
+        throw new Error(`Invalid transaction signature: ${tx.hash}`)
+      }
+      for (const input of tx.inputs) {
+        if (input.previousTxHash === "0".repeat(64)) continue
+        const utxo = await UTXOModel.getUTXO(input.previousTxHash, input.outputIndex)
+        if (!utxo) throw new Error(`UTXO not found: ${input.previousTxHash}:${input.outputIndex}`)
+      }
+    }
+
+    // Rebuild block and verify PoW
+    const block = new Block(index, timestamp, txs, previousHash, nonce)
+    const calcHash = block.calculateHash()
+    if (calcHash !== hash) {
+      throw new Error(`Hash mismatch: provided ${hash}, calculated ${calcHash}`)
+    }
+    const prefix = "0".repeat(this.difficulty)
+    if (!hash.startsWith(prefix)) {
+      throw new Error(`Insufficient PoW: expected prefix ${prefix}`)
+    }
+
+    // Persist block and apply state changes
+    const blockId = await BlockModel.create({
+      index: block.index,
+      hash: block.hash,
+      previousHash: block.previousHash,
+      merkleRoot: block.merkleRoot,
+      timestamp: block.timestamp,
+      nonce: block.nonce,
+      difficulty: this.difficulty,
+      transactions: txs,
+    })
+
+    for (const tx of txs) {
+      await UTXOTransactionModel.saveTransaction(tx, blockId)
+
+      if (tx.type !== "coinbase") {
+        // Remove spent UTXOs
+        for (const input of tx.inputs) {
+          await UTXOModel.removeUTXO(input.previousTxHash, input.outputIndex)
+        }
+      }
+
+      // Add new UTXOs
+      for (let i = 0; i < tx.outputs.length; i++) {
+        const output = tx.outputs[i]
+        await UTXOModel.addUTXO(tx.hash, i, output.amount, output.address, output.scriptPubKey, block.index)
+      }
+
+      // Remove tx from mempool if present
+      try {
+        await UTXOTransactionModel.removeFromMempool(tx.hash)
+      } catch {
+        // ignore
+      }
+    }
+
+    // Update balance caches
+    const affected = new Set()
+    for (const tx of txs) {
+      for (const o of tx.outputs) affected.add(o.address)
+    }
+    for (const addr of affected) {
+      await UTXOModel.updateAddressBalance(addr)
+    }
+
+    console.log(`✅ Accepted external block #${block.index} ${block.hash}`)
+
+    return {
+      block: { index: block.index, hash: block.hash },
+      txCount: txs.length,
     }
   }
 

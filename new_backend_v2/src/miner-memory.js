@@ -14,7 +14,7 @@
  *   MINER_ONCE=true                      (optional: run one cycle then exit)
  */
 
-require("dotenv").config()
+require("dotenv").config({ path: process.env.ENV_FILE || ".env" });
 
 const ChainModule = require("./core/UTXOBlockchain")
 const { UTXOTransaction, TransactionInput, TransactionOutput } = require("./core/UTXOTransaction")
@@ -24,12 +24,12 @@ const UTXOBlockchain = ChainModule?.default || ChainModule
 
 const MINER_ADDRESS = process.env.MINER_ADDRESS || ""
 const MODE = (process.env.MEMPOOL_MODE || "remote").toLowerCase()
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000"
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3001"
 const INTERVAL = Number.parseInt(process.env.MINER_INTERVAL_MS || "3000", 10)
 const RUN_ONCE = String(process.env.MINER_ONCE || "").toLowerCase() === "true"
 
-if (!MINER_ADDRESS || !MINER_ADDRESS.startsWith("san1")) {
-  console.error("❌ MINER_ADDRESS is required (e.g., san1...)")
+if (!MINER_ADDRESS || !MINER_ADDRESS.startsWith("SNC")) {
+  console.error("❌ MINER_ADDRESS is required (e.g., SNC...)")
   process.exit(1)
 }
 
@@ -109,7 +109,7 @@ async function main() {
     intervalMs: INTERVAL,
   })
   const blockchain = new UTXOBlockchain()
-  await blockchain.initialize()
+  // await blockchain.initialize()
 
   const cycle = async () => {
     await runOnce(blockchain)

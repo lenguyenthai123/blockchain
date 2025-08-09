@@ -1,11 +1,12 @@
 const crypto = require("crypto")
 const sha256 = require("sha256")
-
+const {UTXOTransaction} = require("./UTXOTransaction")
 class Block {
   constructor(index, timestamp, transactions, previousHash, nonce = 0) {
     this.index = index
     this.timestamp = timestamp
-    this.transactions = transactions
+    //Cast transaction into list of UTXOTransaction objects
+    this.transactions = transactions.map(tx => new UTXOTransaction(tx.inputs, tx.outputs, tx.timestamp,tx.type))
     this.previousHash = previousHash
     this.nonce = nonce
     this.hash = this.calculateHash()
@@ -59,6 +60,10 @@ class Block {
       nonce: this.nonce,
       merkleRoot: this.merkleRoot,
     }
+  }
+  validateWithNonce(nonce) {
+    const hash = sha256(this.index + this.timestamp + JSON.stringify(this.transactions) + this.previousHash + nonce)
+    return hash === this.hash && hash.substring(0, this.difficulty) === Array(this.difficulty + 1).join("0")
   }
 }
 

@@ -94,16 +94,26 @@ class UTXOTransactionModel {
 
     try {
       await client.query("BEGIN")
-
+      console.log("Saving transaction")
       // Insert transaction
-      const txResult = await client.query(
-        `INSERT INTO transactions (hash, block_id, timestamp, tx_type)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [transaction.hash, blockId, transaction.timestamp, transaction.type],
+      // Check if transaction already exists
+      const existingTx = await client.query(
+        `SELECT id FROM transactions WHERE hash = $1`,
+        [transaction.hash]
       )
+      let transactionId=0
+      if (existingTx.rows.length > 0) {
+        transactionId = existingTx.rows[0].id
+      } else {
+        const txResult = await client.query(
+          `INSERT INTO transactions (hash, block_id, timestamp, tx_type)
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [transaction.hash, blockId, transaction.timestamp, transaction.type],
+        )
+        transactionId = txResult.rows[0].id
+      }
       await client.query("DELETE FROM mempool_transactions WHERE hash = $1", [transaction.hash])
 
-      const transactionId = txResult.rows[0].id
 
       // Insert inputs
       for (let i = 0; i < transaction.inputs.length; i++) {
@@ -135,6 +145,7 @@ class UTXOTransactionModel {
       return transactionId
     } catch (error) {
       await client.query("ROLLBACK")
+      console.error("Chỗ này Error saving transaction:", error)
       throw error
     } finally {
       client.release()

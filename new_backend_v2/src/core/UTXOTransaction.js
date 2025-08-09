@@ -44,12 +44,13 @@ class TransactionOutput {
 }
 
 class UTXOTransaction {
-  constructor(inputs = [], outputs = [], timestamp = Date.now()) {
-    this.inputs = inputs
-    this.outputs = outputs
+  constructor(inputs = [], outputs = [], timestamp = Date.now(), type = "transfer") {
+    // Cast into TransactionInput and TransactionOutput objects
+    this.inputs = inputs.map((input) => new TransactionInput(input.previousTxHash, input.outputIndex, input.signature, input.publicKey))
+    this.outputs = outputs.map((output) => new TransactionOutput(output.amount, output.address))
     this.timestamp = timestamp
     this.hash = this.calculateHash()
-    this.type = "transfer"
+    this.type = type
   }
 
   calculateHash() {
@@ -65,6 +66,17 @@ class UTXOTransaction {
 
   // Create coinbase transaction (mining reward)
   static createCoinbase(minerAddress, amount, blockHeight) {
+    const coinbaseInput = new TransactionInput("0".repeat(64), 0xffffffff, "", "")
+    const coinbaseOutput = new TransactionOutput(amount, minerAddress)
+
+    const tx = new UTXOTransaction([coinbaseInput], [coinbaseOutput])
+    tx.type = "coinbase"
+    tx.hash = tx.calculateHash()
+    return tx
+  }
+
+    // Create coinbase transaction (mining reward)
+  static createCoinbaseWithTime(minerAddress, amount, blockHeight, timestamp = Date.now()) {
     const coinbaseInput = new TransactionInput("0".repeat(64), 0xffffffff, "", "")
     const coinbaseOutput = new TransactionOutput(amount, minerAddress)
 

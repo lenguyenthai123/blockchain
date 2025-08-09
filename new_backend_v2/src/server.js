@@ -1,4 +1,4 @@
-require("dotenv").config({ path: process.env.ENV_FILE || ".env" });
+require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const helmet = require("helmet")
@@ -10,6 +10,7 @@ const utxoRoutes = require("./routes/utxo-blockchain")
 const mempoolRoutes = require("./routes/mempool")
 const syncRoutes = require("./routes/sync")
 const mineRoutes = require("./routes/mine")
+const miningRoutes = require("./routes/mining")
 const { generalLimit, transactionLimit, miningLimit } = require("./middleware/security")
 const createTables = require("./database/migrate")
 const { testConnection, isDbAvailable, startDbWatchdog } = require("./database/config")
@@ -19,7 +20,7 @@ const SyncService = require("./services/sync-service")
 const sanCoinBlockchain = new UTXOBlockchain()
 
 // Logger setup
-const logger = winston.createLogger({
+global.logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
     winston.format.timestamp(),
@@ -64,8 +65,8 @@ app.use(
 )
 
 // Body parsing
-app.use(express.json({ limit: "10mb" }))
-app.use(express.urlencoded({ extended: true, limit: "10mb" }))
+app.use(express.json({ limit: "1mb" }))
+app.use(express.urlencoded({ extended: true, limit: "1mb" }))
 
 // Rate limiting
 app.use("/api/", generalLimit)
@@ -74,23 +75,20 @@ app.use("/api/blockchain/utxo-transaction", transactionLimit)
 app.use("/api/blockchain/mine", miningLimit)
 
 // Attach blockchain and logger
-app.use((req, res, next) => {
+app.use(async (req, _res, next) => {
   req.blockchain = sanCoinBlockchain
-  req.logger = logger
+  if (!sanCoinBlockchain.initialized) {
+    try {
+      await sanCoinBlockchain.initialize()
+    } catch (e) {
+      console.error("Blockchain init error:", e.message)
+    }
+  }
   next()
 })
 
 // Health check
-app.get("/health", async (_req, res) => {
-  const latest = await sanCoinBlockchain.getLatestBlock()
-  res.json({
-    success: true,
-    message: "SanCoin UTXO Backend",
-    timestamp: new Date().toISOString(),
-    storage: isDbAvailable() ? "db" : "memory",
-    latestBlock: latest || null,
-  })
-})
+app.get("/health", (_req, res) => res.json({ ok: true }))
 
 // Routes
 app.use("/api", mempoolRoutes)
@@ -98,6 +96,7 @@ app.use("/api", syncRoutes)
 app.use("/api", mineRoutes)
 app.use("/api/blockchain", blockchainRoutes)
 app.use("/api/blockchain", utxoRoutes)
+app.use("/api/blockchain", miningRoutes)
 
 // Error handling
 app.use((error, _req, res, _next) => {

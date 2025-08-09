@@ -13,7 +13,7 @@ router.get("/info", async (req, res) => {
       data: stats,
     })
   } catch (error) {
-    req.logger.error("Error getting blockchain info:", error)
+    logger.error("Error getting blockchain info:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -34,7 +34,7 @@ router.get("/balance/:address", validateAddress, async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error getting balance:", error)
+    logger.error("Error getting balance:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -53,7 +53,7 @@ router.post("/transaction", validateTransaction, async (req, res) => {
 
     const txHash = await req.blockchain.addTransactionToMempool(transaction)
 
-    req.logger.info("Transaction added to mempool:", { hash: txHash, from: fromAddress, to: toAddress, amount })
+    logger.info("Transaction added to mempool:", { hash: txHash, from: fromAddress, to: toAddress, amount })
 
     res.json({
       success: true,
@@ -63,7 +63,7 @@ router.post("/transaction", validateTransaction, async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error submitting transaction:", error)
+    logger.error("Error submitting transaction:", error)
     res.status(400).json({
       success: false,
       error: error.message,
@@ -89,7 +89,7 @@ router.get("/transaction/:hash", async (req, res) => {
       data: result,
     })
   } catch (error) {
-    req.logger.error("Error getting transaction:", error)
+    logger.error("Error getting transaction:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -111,7 +111,7 @@ router.get("/address/:address/transactions", validateAddress, async (req, res) =
       },
     })
   } catch (error) {
-    req.logger.error("Error getting address transactions:", error)
+    logger.error("Error getting address transactions:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -138,7 +138,7 @@ router.get("/block/:index", async (req, res) => {
       data: block,
     })
   } catch (error) {
-    req.logger.error("Error getting block:", error)
+    logger.error("Error getting block:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -164,7 +164,7 @@ router.get("/block/hash/:hash", async (req, res) => {
       data: block,
     })
   } catch (error) {
-    req.logger.error("Error getting block by hash:", error)
+    logger.error("Error getting block by hash:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -184,7 +184,7 @@ router.get("/blocks/latest", async (req, res) => {
       data: blocks,
     })
   } catch (error) {
-    req.logger.error("Error getting latest blocks:", error)
+    logger.error("Error getting latest blocks:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -212,7 +212,7 @@ router.get("/stats", async (req, res) => {
       data: additionalStats,
     })
   } catch (error) {
-    req.logger.error("Error getting network stats:", error)
+    logger.error("Error getting network stats:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -235,7 +235,7 @@ router.post("/mine", async (req, res) => {
 
     const block = await req.blockchain.minePendingTransactions(minerAddress)
 
-    req.logger.info("Block mined:", { index: block.index, hash: block.hash, miner: minerAddress })
+    logger.info("Block mined:", { index: block.index, hash: block.hash, miner: minerAddress })
 
     res.json({
       success: true,
@@ -245,7 +245,7 @@ router.post("/mine", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error mining block:", error)
+    logger.error("Error mining block:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -268,7 +268,7 @@ router.get("/mempool", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error getting mempool:", error)
+    logger.error("Error getting mempool:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -327,7 +327,7 @@ router.get("/search/:query", async (req, res) => {
       },
     })
   } catch (error) {
-    req.logger.error("Error searching:", error)
+    logger.error("Error searching:", error)
     res.status(500).json({
       success: false,
       error: error.message,

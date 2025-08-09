@@ -20,7 +20,7 @@ class UTXOModel {
       mem.removeUTXO(txHash, index)
       return true
     }
-    await pool.query(`DELETE FROM utxos WHERE tx_hash = $1 AND output_index = $2`, [txHash, index])
+    await pool.query(`DELETE FROM utxo_set WHERE tx_hash = $1 AND output_index = $2`, [txHash, index])
     return true
   }
 
@@ -30,7 +30,7 @@ class UTXOModel {
     }
     const result = await pool.query(`SELECT * FROM utxo_set WHERE tx_hash = $1 AND output_index = $2`, [
       txHash,
-      outputIndex,
+      index,
     ])
 
     if (result.rows.length === 0) return null
