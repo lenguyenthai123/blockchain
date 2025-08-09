@@ -1,185 +1,218 @@
-"use client"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Copy, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import TransactionsTable from "@/components/transactions-table"
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react"
+import { notFound } from "next/navigation"
+import { explorerApi } from "@/lib/explorer-api"
+import { CopyButton } from "@/components/copy-button"
 
-// Mock data for demonstration
-const mockBlockData = {
-  number: 123456,
-  hash: "0xabc123def456789abcdef123456789abcdef123456789abcdef123456789abcdef",
-  parentHash: "0xdef456abc789def456abc789def456abc789def456abc789def456abc789def456",
-  timestamp: "2025-01-27 21:45:32 UTC",
-  miner: "BuilderNet",
-  difficulty: "15.5T",
-  totalDifficulty: "58.7P",
-  size: "125,432 bytes",
-  gasUsed: "29,842,156",
-  gasLimit: "30,000,000",
-  baseFee: "12.5 Gwei",
-  txCount: 217,
-  reward: "2.5 SNC",
+function formatDateTime(ts: number) {
+  if (!ts) return "—"
+  const d = new Date(ts)
+  return `${d.toLocaleString()}`
 }
 
-const mockTransactions = [
-  {
-    hash: "0xabc123def456...",
-    method: "Transfer",
-    block: 123456,
-    age: "2 mins ago",
-    from: "san1q...a3x4",
-    to: "san1q...b9y5",
-    value: 2.5,
-    status: "Completed",
-  },
-  {
-    hash: "0xdef456ghi789...",
-    method: "Contract Call",
-    block: 123456,
-    age: "2 mins ago",
-    from: "san1q...c1z6",
-    to: "san1q...d7w8",
-    value: 0.8,
-    status: "Completed",
-  },
-]
+function formatRelative(ts: number) {
+  if (!ts) return "—"
+  const diff = Date.now() - ts
+  const sec = Math.max(0, Math.floor(diff / 1000))
+  if (sec < 60) return `${sec}s ago`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  return `${day}d ago`
+}
 
-export default function BlockDetailsPage({ params }: { params: { number: string } }) {
-  const blockNumber = Number.parseInt(params.number)
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    alert("Copied to clipboard!")
+export default async function BlockDetailsPage({
+  params,
+}: {
+  params: { number: string }
+}) {
+  const blockIndex = Number.parseInt(params.number, 10)
+  if (Number.isNaN(blockIndex)) {
+    notFound()
   }
+
+  let block: Awaited<ReturnType<typeof explorerApi.getBlockByIndex>>
+  try {
+    block = await explorerApi.getBlockByIndex(blockIndex)
+  } catch (e) {
+    // If the backend doesn't have this block, show 404
+    notFound()
+  }
+
+  const txCount = block.transactions.length
+  const coinbaseCount = block.transactions.filter((t) => t.type === "coinbase").length
+  const transferCount = txCount - coinbaseCount
 
   return (
     <div className="space-y-6">
+      {/* Header with navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Block #{blockNumber.toLocaleString()}</h1>
-          <Badge variant="outline" className="bg-green-900/50 text-green-300">
-            Finalized
+          <h1 className="text-2xl font-bold">Block #{block.index.toLocaleString()}</h1>
+          <Badge variant="outline" className="bg-emerald-900/40 text-emerald-300 border-emerald-800">
+            Difficulty {block.difficulty}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/explorer/block/${blockNumber - 1}`}>
-            <Button variant="outline" size="icon">
+          <Link href={`/explorer/block/${block.index - 1}`} prefetch={false}>
+            <Button variant="outline" size="icon" aria-label="Previous block">
               <ChevronLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <Link href={`/explorer/block/${blockNumber + 1}`}>
-            <Button variant="outline" size="icon">
+          <Link href={`/explorer/block/${block.index + 1}`} prefetch={false}>
+            <Button variant="outline" size="icon" aria-label="Next block">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>
         </div>
       </div>
 
+      {/* Block Information */}
       <Card className="bg-gray-900/50 border-gray-800">
         <CardHeader>
           <CardTitle>Block Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left column */}
             <div className="space-y-4">
-              <div className="flex justify-between items-start">
-                <span className="text-sm text-gray-400 min-w-24">Block Hash:</span>
+              <div className="flex justify-between items-start gap-3">
+                <span className="text-sm text-gray-400 min-w-28">Block Hash:</span>
                 <div className="flex items-center gap-2 flex-1">
-                  <span className="font-mono text-sm break-all">{mockBlockData.hash}</span>
-                  <Button variant="ghost" size="icon" onClick={() => copyToClipboard(mockBlockData.hash)}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <span className="font-mono text-sm break-all">{block.hash}</span>
+                  <CopyButton value={block.hash} />
                 </div>
               </div>
 
-              <div className="flex justify-between items-start">
-                <span className="text-sm text-gray-400 min-w-24">Parent Hash:</span>
+              <div className="flex justify-between items-start gap-3">
+                <span className="text-sm text-gray-400 min-w-28">Parent Hash:</span>
                 <div className="flex items-center gap-2 flex-1">
                   <Link
-                    href={`/explorer/block/${blockNumber - 1}`}
+                    href={`/explorer/block/${block.index - 1}`}
                     className="font-mono text-sm text-cyan-400 hover:underline break-all"
+                    prefetch={false}
                   >
-                    {mockBlockData.parentHash}
+                    {block.previousHash}
                   </Link>
-                  <Button variant="ghost" size="icon" onClick={() => copyToClipboard(mockBlockData.parentHash)}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  <CopyButton value={block.previousHash} />
                 </div>
               </div>
 
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-400">Timestamp:</span>
-                <span className="text-sm">{mockBlockData.timestamp}</span>
+                <span className="text-sm">{formatDateTime(block.timestamp)}</span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Miner:</span>
-                <span className="text-sm text-cyan-400">{mockBlockData.miner}</span>
+                <span className="text-sm text-gray-400">Age:</span>
+                <span className="text-sm">{formatRelative(block.timestamp)}</span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Block Reward:</span>
-                <span className="text-sm font-semibold">{mockBlockData.reward}</span>
+                <span className="text-sm text-gray-400">Merkle Root:</span>
+                <span className="text-xs md:text-sm font-mono break-all">{block.merkleRoot}</span>
               </div>
             </div>
 
+            {/* Right column */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-400">Transactions:</span>
-                <span className="text-sm font-semibold">{mockBlockData.txCount}</span>
+                <span className="text-sm font-semibold">{txCount}</span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">Coinbase:</span>
+                <span className="text-sm">{coinbaseCount}</span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">Transfers:</span>
+                <span className="text-sm">{transferCount}</span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400">Nonce:</span>
+                <span className="text-sm">{block.nonce}</span>
               </div>
 
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-400">Difficulty:</span>
-                <span className="text-sm">{mockBlockData.difficulty}</span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Total Difficulty:</span>
-                <span className="text-sm">{mockBlockData.totalDifficulty}</span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Size:</span>
-                <span className="text-sm">{mockBlockData.size}</span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Gas Used:</span>
-                <span className="text-sm">
-                  {mockBlockData.gasUsed} (
-                  {(
-                    (Number.parseInt(mockBlockData.gasUsed.replace(/,/g, "")) /
-                      Number.parseInt(mockBlockData.gasLimit.replace(/,/g, ""))) *
-                    100
-                  ).toFixed(1)}
-                  %)
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Gas Limit:</span>
-                <span className="text-sm">{mockBlockData.gasLimit}</span>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Base Fee:</span>
-                <span className="text-sm">{mockBlockData.baseFee}</span>
+                <span className="text-sm">{block.difficulty}</span>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Transactions */}
       <Card className="bg-gray-900/50 border-gray-800">
-        <CardHeader>
-          <CardTitle>Transactions in this Block ({mockBlockData.txCount})</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Transactions in this Block ({txCount})</CardTitle>
+          <div className="text-xs text-gray-400">{"Includes coinbase and transfer transactions"}</div>
         </CardHeader>
-        <CardContent>
-          <TransactionsTable transactions={mockTransactions} />
+        <CardContent className="overflow-x-auto">
+          {txCount === 0 ? (
+            <div className="text-sm text-gray-400">No transactions found in this block.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-400">
+                  <th className="text-left font-medium py-2">Hash</th>
+                  <th className="text-left font-medium py-2">Type</th>
+                  <th className="text-left font-medium py-2">Timestamp</th>
+                  <th className="text-left font-medium py-2">Age</th>
+                  <th className="text-left font-medium py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {block.transactions
+                  .slice()
+                  .sort((a, b) => b.timestamp - a.timestamp)
+                  .map((tx) => (
+                    <tr key={tx.hash} className="border-t border-gray-800">
+                      <td className="py-2">
+                        <Link
+                          href={`/explorer/tx/${tx.hash}`}
+                          className="font-mono text-cyan-400 hover:underline"
+                          prefetch={false}
+                        >
+                          {tx.hash}
+                        </Link>
+                      </td>
+                      <td className="py-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            tx.type === "coinbase"
+                              ? "bg-emerald-900/30 text-emerald-300 border-emerald-800"
+                              : "bg-amber-900/30 text-amber-300 border-amber-800"
+                          }
+                        >
+                          {tx.type}
+                        </Badge>
+                      </td>
+                      <td className="py-2">{formatDateTime(tx.timestamp)}</td>
+                      <td className="py-2 text-gray-400">{formatRelative(tx.timestamp)}</td>
+                      <td className="py-2">
+                        <Link
+                          href={`/explorer/tx/${tx.hash}`}
+                          className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:underline"
+                          prefetch={false}
+                        >
+                          View <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
     </div>
