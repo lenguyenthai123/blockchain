@@ -93,7 +93,10 @@ export class TransactionSigner {
       outputs: unsignedTx.outputs,
       timestamp: unsignedTx.timestamp,
       type: unsignedTx.type,
-      minerAddress: unsignedTx.minerAddress,
+      // Ignore minerAddres
+      // because it's not used in this context
+      // but you can add it if needed
+      minerAddress: "", // Placeholder, can be set if needed
     }
 
     console.log("✅ Transaction signed successfully:", {

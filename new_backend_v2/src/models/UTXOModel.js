@@ -1,22 +1,33 @@
-const { pool } = require("../database/config")
+const { pool, isDbAvailable } = require("../database/config")
+const mem = require("../storage/memory-store")
 
 class UTXOModel {
-  // Add UTXO to the set
-  static async addUTXO(txHash, outputIndex, amount, address, scriptPubKey, blockHeight) {
+  static async addUTXO(txHash, index, amount, address, scriptPubKey, blockIndex) {
+    if (!isDbAvailable()) {
+      mem.addUTXO(txHash, index, amount, address, scriptPubKey, blockIndex)
+      return true
+    }
     await pool.query(
       `INSERT INTO utxo_set (tx_hash, output_index, amount, address, script_pub_key, block_height, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
-      [txHash, outputIndex, amount, address, scriptPubKey, blockHeight],
+      [txHash, index, amount, address, scriptPubKey, blockIndex],
     )
+    return true
   }
 
-  // Remove UTXO from the set (when spent)
-  static async removeUTXO(txHash, outputIndex) {
-    await pool.query(`DELETE FROM utxo_set WHERE tx_hash = $1 AND output_index = $2`, [txHash, outputIndex])
+  static async removeUTXO(txHash, index) {
+    if (!isDbAvailable()) {
+      mem.removeUTXO(txHash, index)
+      return true
+    }
+    await pool.query(`DELETE FROM utxos WHERE tx_hash = $1 AND output_index = $2`, [txHash, index])
+    return true
   }
 
-  // Get specific UTXO
-  static async getUTXO(txHash, outputIndex) {
+  static async getUTXO(txHash, index) {
+    if (!isDbAvailable()) {
+      return mem.getUTXO(txHash, index)
+    }
     const result = await pool.query(`SELECT * FROM utxo_set WHERE tx_hash = $1 AND output_index = $2`, [
       txHash,
       outputIndex,
@@ -38,6 +49,7 @@ class UTXOModel {
 
   // Get all UTXOs for an address
   static async getUTXOsByAddress(address) {
+    if (!isDbAvailable()) return mem.getUTXOsByAddress(address)
     const result = await pool.query(`SELECT * FROM utxo_set WHERE address = $1 ORDER BY amount DESC`, [address])
 
     return result.rows.map((utxo) => ({
@@ -53,6 +65,7 @@ class UTXOModel {
 
   // Get address balance from UTXOs
   static async getAddressBalance(address) {
+    if (!isDbAvailable()) return mem.getAddressBalance(address)
     const result = await pool.query(`SELECT COALESCE(SUM(amount), 0) as balance FROM utxo_set WHERE address = $1`, [
       address,
     ])
@@ -67,6 +80,7 @@ class UTXOModel {
 
   // Update address balance cache
   static async updateAddressBalance(address, balance = null) {
+    if (!isDbAvailable()) return mem.setAddressBalance(address)
     if (balance === null) {
       // Calculate balance if not provided
       const result = await pool.query(`SELECT COALESCE(SUM(amount), 0) as balance FROM utxo_set WHERE address = $1`, [
@@ -99,18 +113,22 @@ class UTXOModel {
 
   // Get total UTXO count
   static async getTotalUTXOCount() {
+    if (!isDbAvailable()) return mem.totalUTXOCount()
     const result = await pool.query("SELECT COUNT(*) as count FROM utxo_set")
     return Number.parseInt(result.rows[0].count)
   }
 
   // Get total value of all UTXOs - NEW METHOD
   static async getTotalValue() {
+    if (!isDbAvailable()) return mem.totalUTXOValue()
     const result = await pool.query("SELECT COALESCE(SUM(amount), 0) as total_value FROM utxo_set")
     return Number.parseFloat(result.rows[0].total_value) || 0
   }
 
   // Get largest UTXO - NEW METHOD
   static async getLargestUTXO() {
+    if (!isDbAvailable()) return mem.largestUTXO()
+
     const result = await pool.query("SELECT MAX(amount) as largest FROM utxo_set")
     return Number.parseFloat(result.rows[0].largest) || 0
   }

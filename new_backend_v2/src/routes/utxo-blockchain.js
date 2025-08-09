@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const { UTXOTransaction, TransactionInput, TransactionOutput } = require("../core/UTXOTransaction")
 const { validateAddress } = require("../middleware/validation")
+const SUBMIT_TX_MODE = (process.env.SUBMIT_TX_MODE || "mempool").toLowerCase()
 
 // Get UTXOs for address
 router.get("/address/:address/utxos", validateAddress, async (req, res) => {
@@ -118,17 +119,17 @@ router.get("/blocks/latest", async (req, res) => {
   }
 })
 
-// Submit signed UTXO transaction (immediate mining with PoW)
+// Submit signed UTXO transaction (configurable: mempool or immediate mining)
 router.post("/submit-signed-transaction", async (req, res) => {
   try {
     await req.blockchain.initialize()
     const { hash, inputs, outputs, timestamp, type, minerAddress } = req.body
 
     // Validate required fields
-    if (!hash || !inputs || !outputs || !minerAddress) {
+    if (!hash || !inputs || !outputs) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: hash, inputs, outputs, minerAddress",
+        error: "Missing required fields: hash, inputs, outputs",
       })
     }
 
@@ -145,36 +146,67 @@ router.post("/submit-signed-transaction", async (req, res) => {
     transaction.hash = hash
     transaction.type = type || "transfer"
 
-    req.logger.info("Processing signed transaction:", {
-      hash: transaction.hash,
-      inputs: inputs.length,
-      outputs: outputs.length,
-      minerAddress,
-    })
+    // Decide submission behavior
+    const wantImmediate =
+      (typeof req.query.mine === "string" && req.query.mine.toLowerCase() === "true") || SUBMIT_TX_MODE === "immediate"
 
-    // Process transaction immediately with Proof of Work
-    const result = await req.blockchain.processSignedTransaction(transaction, minerAddress)
+    if (wantImmediate) {
+      if (!minerAddress) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Immediate mining requested but minerAddress missing. Provide minerAddress or set SUBMIT_TX_MODE=mempool.",
+        })
+      }
 
-    req.logger.info("Transaction mined successfully:", {
-      txHash: result.transactionHash,
-      blockHash: result.blockHash,
-      blockIndex: result.block.index,
-      miningTime: result.miningTime,
-    })
+      req.logger.info("Processing signed transaction immediately (mine now):", {
+        hash: transaction.hash,
+        inputs: inputs.length,
+        outputs: outputs.length,
+        minerAddress,
+      })
 
-    res.json({
-      success: true,
-      data: {
-        transactionHash: result.transactionHash,
+      const result = await req.blockchain.processSignedTransaction(transaction, minerAddress)
+
+      req.logger.info("Transaction mined successfully:", {
+        txHash: result.transactionHash,
         blockHash: result.blockHash,
         blockIndex: result.block.index,
         miningTime: result.miningTime,
-        message: "Transaction processed and mined successfully",
+      })
+
+      return res.json({
+        success: true,
+        data: {
+          transactionHash: result.transactionHash,
+          blockHash: result.blockHash,
+          blockIndex: result.block.index,
+          miningTime: result.miningTime,
+          message: "Transaction processed and mined successfully",
+        },
+      })
+    }
+
+    // Default: enqueue to mempool (not mined immediately)
+    const fee = 0.001 // simple static fee; adjust as needed or make configurable
+    const txHash = await req.blockchain.addTransactionToMempool(transaction, fee)
+
+    req.logger.info("Signed transaction added to mempool:", {
+      hash: txHash,
+      inputs: inputs.length,
+      outputs: outputs.length,
+    })
+
+    return res.json({
+      success: true,
+      data: {
+        transactionHash: txHash,
+        message: "Transaction added to mempool. It will be mined by a miner shortly.",
       },
     })
   } catch (error) {
-    req.logger.error("Error processing signed transaction:", error)
-    res.status(400).json({
+    req.logger.error("Error submitting signed transaction:", error)
+    return res.status(400).json({
       success: false,
       error: error.message,
     })

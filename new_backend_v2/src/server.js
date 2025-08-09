@@ -1,4 +1,4 @@
-require("dotenv").config()
+require("dotenv").config({ path: process.env.ENV_FILE || ".env" });
 const express = require("express")
 const cors = require("cors")
 const helmet = require("helmet")
@@ -7,11 +7,15 @@ const winston = require("winston")
 const UTXOBlockchain = require("./core/UTXOBlockchain")
 const blockchainRoutes = require("./routes/blockchain")
 const utxoRoutes = require("./routes/utxo-blockchain")
+const mempoolRoutes = require("./routes/mempool")
+const syncRoutes = require("./routes/sync")
+const mineRoutes = require("./routes/mine")
 const { generalLimit, transactionLimit, miningLimit } = require("./middleware/security")
 const createTables = require("./database/migrate")
-const { testConnection } = require("./database/config")
-const createRootAccount = require("./database/create-root-account")
-// Initialize UTXO blockchain
+const { testConnection, isDbAvailable, startDbWatchdog } = require("./database/config")
+const SyncService = require("./services/sync-service")
+
+// Initialize blockchain
 const sanCoinBlockchain = new UTXOBlockchain()
 
 // Logger setup
@@ -28,13 +32,8 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: "logs/combined.log" }),
   ],
 })
-
 if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.simple(),
-    }),
-  )
+  logger.add(new winston.transports.Console({ format: winston.format.simple() }))
 }
 
 const app = express()
@@ -74,107 +73,87 @@ app.use("/api/blockchain/transaction", transactionLimit)
 app.use("/api/blockchain/utxo-transaction", transactionLimit)
 app.use("/api/blockchain/mine", miningLimit)
 
-// Blockchain middleware
+// Attach blockchain and logger
 app.use((req, res, next) => {
   req.blockchain = sanCoinBlockchain
   req.logger = logger
   next()
 })
 
-// Request logging
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path}`, {
-    ip: req.ip,
-    userAgent: req.get("User-Agent"),
+// Health check
+app.get("/health", async (_req, res) => {
+  const latest = await sanCoinBlockchain.getLatestBlock()
+  res.json({
+    success: true,
+    message: "SanCoin UTXO Backend",
+    timestamp: new Date().toISOString(),
+    storage: isDbAvailable() ? "db" : "memory",
+    latestBlock: latest || null,
   })
-  next()
 })
 
 // Routes
+app.use("/api", mempoolRoutes)
+app.use("/api", syncRoutes)
+app.use("/api", mineRoutes)
 app.use("/api/blockchain", blockchainRoutes)
 app.use("/api/blockchain", utxoRoutes)
 
-// Health check
-app.get("/health", async (req, res) => {
-  const dbConnected = await testConnection()
-
-  res.json({
-    success: true,
-    message: "SanCoin UTXO Blockchain Backend is running",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0",
-    database: dbConnected ? "connected" : "disconnected",
-    model: "UTXO",
-  })
-})
-
-// Error handling middleware
-app.use((error, req, res, next) => {
+// Error handling
+app.use((error, _req, res, _next) => {
   logger.error("Unhandled error:", error)
-
-  res.status(500).json({
-    success: false,
-    error: "Internal server error",
-  })
+  res.status(500).json({ success: false, error: "Internal server error" })
 })
 
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: "Endpoint not found",
-  })
+// 404
+app.use("*", (_req, res) => {
+  res.status(404).json({ success: false, error: "Endpoint not found" })
 })
 
-// Initialize database and start server
 async function startServer() {
   try {
-    console.log("🚀 Starting SanCoin UTXO Blockchain Backend...")
-    console.log("📊 Environment:", process.env.NODE_ENV || "development")
-
-    // Test database connection first
-    console.log("🔍 Testing database connection...")
+    console.log("🚀 Starting SanCoin Backend...")
+    // Try DB
     const dbConnected = await testConnection()
-
-    if (!dbConnected) {
-      console.error("❌ Cannot start server without database connection")
-      console.error("🔧 Please check:")
-      console.error("1. DATABASE_URL in .env file")
-      console.error("2. Network connectivity to database")
-      console.error("3. Database credentials")
-      process.exit(1)
+    if (dbConnected) {
+      console.log("💾 Storage mode: Database")
+      await createTables()
+    } else {
+      console.warn("⚠️ Database unavailable. Falling back to in-memory storage (RAM).")
+      console.warn("   Data will be ephemeral until DB is restored.")
     }
 
-    // Create database tables
-    await createTables()
-    logger.info("UTXO database tables created/verified")
-
-    // Initialize blockchain
+    // Initialize blockchain (handles genesis in DB or memory via models)
     await sanCoinBlockchain.initialize()
-    logger.info("UTXO Blockchain initialized")
 
-   createRootAccount();
+    // Start sync service
+    const syncService = new SyncService(`http://localhost:${PORT}`)
+    syncService.start()
+    // Attach to req for broadcasts in some routes
+    app.use((req, _res, next) => {
+      req.syncService = syncService
+      next()
+    })
+
+    // Start DB watchdog to auto-retry connections
+    startDbWatchdog(Number.parseInt(process.env.DB_WATCHDOG_INTERVAL_MS || "30000", 10))
+
     // Start server
     app.listen(PORT, () => {
-      logger.info(`SanCoin UTXO Blockchain Backend running on port ${PORT}`)
-      console.log(`🎉 SanCoin UTXO Blockchain Backend running on port ${PORT}`)
-      console.log(`📊 Health check: http://localhost:${PORT}/health`)
+      logger.info(`SanCoin Backend running on port ${PORT}`)
+      console.log(`🎉 SanCoin Backend running on port ${PORT}`)
+      console.log(`📊 Storage mode: ${isDbAvailable() ? "Database" : "Memory"}`)
       console.log(`🔗 API Base URL: http://localhost:${PORT}/api`)
-      console.log(`💾 Database: Connected to PostgreSQL`)
-      console.log(`🔗 Model: UTXO (Bitcoin-like)`)
     })
   } catch (error) {
     logger.error("Failed to start server:", error)
     console.error("❌ Failed to start server:", error.message)
-
-    if (error.code === "ECONNREFUSED") {
-      console.error("🔧 Database connection refused. Please check:")
-      console.error("1. DATABASE_URL in .env file")
-      console.error("2. Database server is running")
-      console.error("3. Network connectivity")
-    }
-
-    process.exit(1)
+    // In strict mode we still run in memory
+    console.error("Attempting to start server in memory mode only...")
+    await sanCoinBlockchain.initialize()
+    app.listen(PORT, () => {
+      console.log(`🧠 Memory-only mode server running on port ${PORT}`)
+    })
   }
 }
 
@@ -185,7 +164,6 @@ process.on("SIGTERM", () => {
   logger.info("SIGTERM received, shutting down gracefully")
   process.exit(0)
 })
-
 process.on("SIGINT", () => {
   logger.info("SIGINT received, shutting down gracefully")
   process.exit(0)

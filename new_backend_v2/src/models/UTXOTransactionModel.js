@@ -1,8 +1,15 @@
-const { pool } = require("../database/config")
+const { pool,isDbAvailable } = require("../database/config")
+const mem = require("../storage/memory-store")
 
 class UTXOTransactionModel {
+
+
   // Add transaction to mempool
-  static async addToMempool(transaction, fee) {
+  static async addToMempool(transaction, fee= 0.001) {
+    if (!isDbAvailable()) {
+      const ok = mem.mempoolAdd(transaction, fee)
+      return ok ? transaction.hash : null
+    }
     await pool.query(
       `INSERT INTO mempool_transactions (hash, raw_transaction, fee, timestamp)
        VALUES ($1, $2, $3, $4)`,
@@ -12,6 +19,15 @@ class UTXOTransactionModel {
 
   // Get transactions from mempool
   static async getFromMempool(limit = 100) {
+      if (!isDbAvailable()) {
+      return mem.mempoolList(limit).map((row) => ({
+        hash: row.hash,
+        transaction: row.transaction,
+        fee: row.fee,
+        timestamp: row.timestamp,
+      }))
+    }
+
     const result = await pool.query(`SELECT * FROM mempool_transactions ORDER BY fee DESC, timestamp ASC LIMIT $1`, [
       limit,
     ])
@@ -26,11 +42,24 @@ class UTXOTransactionModel {
 
   // Remove transaction from mempool
   static async removeFromMempool(txHash) {
+    if (!isDbAvailable()) {
+      mem.mempoolRemove(txHash)
+      return true
+    }
     await pool.query(`DELETE FROM mempool_transactions WHERE hash = $1`, [txHash])
   }
 
   // Get latest transactions - NEW METHOD
   static async getLatest(limit = 10) {
+    if (!isDbAvailable()) {
+      return mem.getLatestTx(limit).map((t) => ({
+        hash: t.hash,
+        timestamp: t.timestamp,
+        type: t.type,
+        blockIndex: t.blockIndex,
+        blockHash: t.blockHash,
+      }))
+    }
     const result = await pool.query(
       `SELECT t.*, b.block_index, b.hash as block_hash, b.timestamp as block_timestamp,
               json_agg(
@@ -114,6 +143,27 @@ class UTXOTransactionModel {
 
   // Get transaction by hash
   static async getByHash(hash) {
+if (!isDbAvailable()) {
+      const meta = mem.getTxByHash(hash)
+      if (meta) {
+        const block = meta.blockHash
+          ? { index: meta.blockIndex, hash: meta.blockHash, timestamp: meta.blockTimestamp }
+          : undefined
+        return {
+          transaction: {
+            hash: meta.hash,
+            timestamp: meta.timestamp,
+            type: meta.type,
+          },
+          block,
+          status: block ? "confirmed" : "pending",
+        }
+      }
+
+      const memTx = mem.mempoolList(10000).find((m) => m.hash === hash)
+      if (memTx) return { transaction: memTx.transaction, status: "pending" }
+      return null
+}
     const result = await pool.query(
       `SELECT t.*, b.block_index, b.hash as block_hash, b.timestamp as block_timestamp
        FROM transactions t
@@ -180,6 +230,25 @@ class UTXOTransactionModel {
 
   // Get transactions for an address
   static async getByAddress(address) {
+    if (!isDbAvailable()) {
+      // Approximation: scan memory tx meta with outputs to the address is not stored.
+      // For explorer, we rely on BlockModel transactions list as a rough history.
+      const out = []
+      for (const b of mem.state.blocks) {
+        for (const t of b.transactions || []) {
+          out.push({
+            hash: t.hash,
+            timestamp: t.timestamp,
+            type: t.type,
+            blockIndex: b.index,
+            blockHash: b.hash,
+            blockTimestamp: b.timestamp,
+          })
+        }
+      }
+      out.sort((a, b) => b.blockIndex - a.blockIndex || b.timestamp - a.timestamp)
+      return out
+    }
     const result = await pool.query(
       `SELECT DISTINCT t.hash, t.timestamp, t.tx_type, b.block_index, b.hash as block_hash, b.timestamp as block_timestamp
        FROM transactions t
@@ -212,12 +281,14 @@ class UTXOTransactionModel {
 
   // Get mempool size
   static async getMempoolSize() {
+    if (!isDbAvailable()) return mem.mempoolSize()
     const result = await pool.query("SELECT COUNT(*) as count FROM mempool_transactions")
     return Number.parseInt(result.rows[0].count)
   }
 
   // Get total transaction count
   static async getTotalCount() {
+    if (!isDbAvailable()) return mem.totalTx()
     const result = await pool.query("SELECT COUNT(*) as count FROM transactions")
     return Number.parseInt(result.rows[0].count)
   }
