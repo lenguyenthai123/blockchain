@@ -6,7 +6,7 @@ const AddressModel = require("../models/Address")
 
 class Blockchain {
   constructor() {
-    this.difficulty = 2
+    this.difficulty = 10
     this.miningReward = 100
     this.initialized = false
   }

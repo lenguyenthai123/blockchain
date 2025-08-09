@@ -8,10 +8,14 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/mr-tron/base58 v1.2.0
+	github.com/tyler-smith/go-bip32 v1.0.0 // Thêm thư viện bip32
+	github.com/tyler-smith/go-bip39 v1.1.0 // Thêm thư viện bip39
 	golang.org/x/crypto v0.24.0
 )
 
 require (
+	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
+	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect

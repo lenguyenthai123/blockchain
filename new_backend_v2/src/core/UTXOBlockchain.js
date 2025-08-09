@@ -6,7 +6,7 @@ const UTXOModel = require("../models/UTXOModel")
 
 class UTXOBlockchain {
   constructor() {
-    this.difficulty = 3
+    this.difficulty = 6
     this.miningReward = 50 // SNC
     this.initialized = false
   }

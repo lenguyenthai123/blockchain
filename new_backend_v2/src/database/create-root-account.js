@@ -4,7 +4,7 @@ const { UTXOTransaction, TransactionOutput } = require("../core/UTXOTransaction"
 const UTXOModel = require("../models/UTXOModel")
 
 // Fixed root account mnemonic for consistency
-const ROOT_MNEMONIC = "angle busy burden aspect armor arctic angry belt agent bridge blow another"
+const ROOT_MNEMONIC = "angle busy burden aspect another arctic angry belt agent bridge blow another"
 
 async function createRootAccount() {
   console.log("🔑 Creating ROOT account with 10,000 SNC...")
@@ -57,7 +57,7 @@ async function createRootAccount() {
         Date.now() + i, // Unique timestamp
       )
 
-      fundingTx.type = "root_funding"
+      fundingTx.type = "coinbase"
       fundingTx.hash = fundingTx.calculateHash()
 
       // Add UTXO directly to the set

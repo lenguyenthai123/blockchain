@@ -3,36 +3,38 @@ package core
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 
 	"golang.org/x/crypto/pbkdf2"
 )
 
 const (
 	// Constants for key derivation
-	saltBytes = 16
-	keyLen    = 32 // 256-bit key for AES
+	saltBytes  = 16
+	keyLen     = 32 // 256-bit key for AES
 	iterations = 65536
 )
 
 // KeystoreFile defines the structure of the downloadable keystore file.
 type KeystoreFile struct {
-	Address string         `json:"address"`
-	Crypto  CryptoJSON     `json:"crypto"`
+	Address string     `json:"address"`
+	Crypto  CryptoJSON `json:"crypto"`
 }
 
 // CryptoJSON holds the encrypted data.
 type CryptoJSON struct {
-	Cipher       string `json:"cipher"`
-	CipherText   string `json:"ciphertext"`
-	Nonce        string `json:"nonce"`
-	KDF          string `json:"kdf"`
-	KDFParams    KDFParams `json:"kdfparams"`
+	Cipher     string    `json:"cipher"`
+	CipherText string    `json:"ciphertext"`
+	Nonce      string    `json:"nonce"`
+	KDF        string    `json:"kdf"`
+	KDFParams  KDFParams `json:"kdfparams"`
 }
 
 // KDFParams contains the parameters for the key derivation function.

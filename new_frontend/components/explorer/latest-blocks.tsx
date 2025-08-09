@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ExternalLink, Clock, Hash } from "lucide-react"
-import { utxoApi } from "@/lib/utxo-api"
+import { sanCoinAPI } from "@/lib/utxo-api"
 
 interface Block {
   number: number
@@ -17,6 +17,7 @@ interface Block {
 export default function LatestBlocks() {
   const [blocks, setBlocks] = useState<Block[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadLatestBlocks()
@@ -25,54 +26,13 @@ export default function LatestBlocks() {
   const loadLatestBlocks = async () => {
     try {
       setIsLoading(true)
-      const response = await utxoApi.getLatestBlocks()
+      setError(null)
+      const response = await sanCoinAPI.getLatestBlocks(5)
       setBlocks(response.blocks || [])
-    } catch (error) {
-      console.error("Failed to load latest blocks:", error)
-      // Set mock data for demo
-      const mockBlocks: Block[] = [
-        {
-          number: 1250,
-          hash: "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890",
-          timestamp: Date.now() - 60000,
-          transactions: 15,
-          miner: "san1miner123456789abcdef",
-          size: 1024,
-        },
-        {
-          number: 1249,
-          hash: "0x2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890ab",
-          timestamp: Date.now() - 660000,
-          transactions: 23,
-          miner: "san1miner987654321fedcba",
-          size: 1536,
-        },
-        {
-          number: 1248,
-          hash: "0x3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
-          timestamp: Date.now() - 1260000,
-          transactions: 8,
-          miner: "san1miner456789abcdef123",
-          size: 768,
-        },
-        {
-          number: 1247,
-          hash: "0x4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-          timestamp: Date.now() - 1860000,
-          transactions: 31,
-          miner: "san1miner789abcdef123456",
-          size: 2048,
-        },
-        {
-          number: 1246,
-          hash: "0x5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
-          timestamp: Date.now() - 2460000,
-          transactions: 12,
-          miner: "san1minerabcdef123456789",
-          size: 896,
-        },
-      ]
-      setBlocks(mockBlocks)
+    } catch (err: any) {
+      console.error("Failed to load latest blocks:", err)
+      setError(err?.message || "Failed to load latest blocks.")
+      setBlocks([])
     } finally {
       setIsLoading(false)
     }
@@ -94,10 +54,12 @@ export default function LatestBlocks() {
   }
 
   const formatAddress = (address: string) => {
+    if (!address) return "unknown"
     return `${address.slice(0, 8)}...${address.slice(-6)}`
   }
 
   const formatHash = (hash: string) => {
+    if (!hash) return "unknown"
     return `${hash.slice(0, 10)}...${hash.slice(-8)}`
   }
 
@@ -120,6 +82,23 @@ export default function LatestBlocks() {
         ))}
       </div>
     )
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-900/20 border border-red-800 text-red-300 rounded-lg">
+        <div className="flex items-center justify-between">
+          <p className="text-sm">Failed to load latest blocks. {error}</p>
+          <Button onClick={loadLatestBlocks} variant="ghost" size="sm" className="text-red-300 hover:text-red-200">
+            Retry
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!blocks.length) {
+    return <div className="text-sm text-gray-400">No blocks found.</div>
   }
 
   return (
@@ -149,6 +128,7 @@ export default function LatestBlocks() {
                 variant="ghost"
                 size="sm"
                 className="text-cyan-400 hover:text-cyan-300 p-1"
+                aria-label={`View block ${block.number}`}
               >
                 <ExternalLink className="h-3 w-3" />
               </Button>

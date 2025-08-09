@@ -228,7 +228,7 @@ export default function SendPage() {
             </Label>
             <Input
               id="recipient"
-              placeholder="san1q..."
+              placeholder="SNC1234567890abcdef..."
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
               className="bg-gray-800 border-gray-600 text-white placeholder-gray-400"

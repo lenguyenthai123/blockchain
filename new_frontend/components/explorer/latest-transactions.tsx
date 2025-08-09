@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ExternalLink, ArrowRight, Clock } from "lucide-react"
-import { utxoApi } from "@/lib/utxo-api"
+import { sanCoinAPI } from "@/lib/utxo-api"
 
 interface Transaction {
   hash: string
@@ -19,6 +19,7 @@ interface Transaction {
 export default function LatestTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadLatestTransactions()
@@ -27,63 +28,13 @@ export default function LatestTransactions() {
   const loadLatestTransactions = async () => {
     try {
       setIsLoading(true)
-      const response = await utxoApi.getLatestTransactions()
+      setError(null)
+      const response = await sanCoinAPI.getLatestTransactions(5)
       setTransactions(response.transactions || [])
-    } catch (error) {
-      console.error("Failed to load latest transactions:", error)
-      // Set mock data for demo
-      const mockTransactions: Transaction[] = [
-        {
-          hash: "0xabc123def456789012345678901234567890123456789012345678901234567890",
-          from: "san1sender123456789abcdef",
-          to: "san1receiver987654321fed",
-          amount: 5.25,
-          fee: 0.001,
-          timestamp: Date.now() - 30000,
-          status: "confirmed",
-          blockNumber: 1250,
-        },
-        {
-          hash: "0xdef456789012345678901234567890123456789012345678901234567890abc1",
-          from: "san1alice456789abcdef123",
-          to: "san1bob987654321fedcba98",
-          amount: 12.5,
-          fee: 0.001,
-          timestamp: Date.now() - 180000,
-          status: "confirmed",
-          blockNumber: 1249,
-        },
-        {
-          hash: "0x789012345678901234567890123456789012345678901234567890abc123def",
-          from: "san1charlie123456789abc",
-          to: "san1david987654321fedc",
-          amount: 0.75,
-          fee: 0.001,
-          timestamp: Date.now() - 420000,
-          status: "confirmed",
-          blockNumber: 1248,
-        },
-        {
-          hash: "0x012345678901234567890123456789012345678901234567890abc123def456",
-          from: "san1eve456789abcdef1234",
-          to: "san1frank987654321fedc",
-          amount: 25.0,
-          fee: 0.001,
-          timestamp: Date.now() - 600000,
-          status: "pending",
-        },
-        {
-          hash: "0x345678901234567890123456789012345678901234567890abc123def456789",
-          from: "san1grace123456789abcd",
-          to: "san1henry987654321fed",
-          amount: 3.33,
-          fee: 0.001,
-          timestamp: Date.now() - 840000,
-          status: "confirmed",
-          blockNumber: 1247,
-        },
-      ]
-      setTransactions(mockTransactions)
+    } catch (err: any) {
+      console.error("Failed to load latest transactions:", err)
+      setError(err?.message || "Failed to load latest transactions.")
+      setTransactions([])
     } finally {
       setIsLoading(false)
     }
@@ -105,10 +56,12 @@ export default function LatestTransactions() {
   }
 
   const formatAddress = (address: string) => {
+    if (!address) return "unknown"
     return `${address.slice(0, 8)}...${address.slice(-6)}`
   }
 
   const formatHash = (hash: string) => {
+    if (!hash) return "unknown"
     return `${hash.slice(0, 10)}...${hash.slice(-8)}`
   }
 
@@ -131,6 +84,28 @@ export default function LatestTransactions() {
         ))}
       </div>
     )
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-900/20 border border-red-800 text-red-300 rounded-lg">
+        <div className="flex items-center justify-between">
+          <p className="text-sm">Failed to load latest transactions. {error}</p>
+          <Button
+            onClick={loadLatestTransactions}
+            variant="ghost"
+            size="sm"
+            className="text-red-300 hover:text-red-200"
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!transactions.length) {
+    return <div className="text-sm text-gray-400">No transactions found.</div>
   }
 
   return (
@@ -177,6 +152,7 @@ export default function LatestTransactions() {
                 variant="ghost"
                 size="sm"
                 className="text-cyan-400 hover:text-cyan-300 p-1"
+                aria-label={`View transaction ${tx.hash}`}
               >
                 <ExternalLink className="h-3 w-3" />
               </Button>

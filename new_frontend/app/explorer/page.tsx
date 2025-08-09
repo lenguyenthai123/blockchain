@@ -8,15 +8,15 @@ import { Search, RefreshCw, Blocks, Activity, Users, TrendingUp } from "lucide-r
 import { ExplorerStatCard } from "@/components/explorer/stat-card"
 import LatestBlocks from "@/components/explorer/latest-blocks"
 import LatestTransactions from "@/components/explorer/latest-transactions"
-import { utxoApi } from "@/lib/utxo-api"
+import { sanCoinAPI } from "@/lib/utxo-api"
 
 interface BlockchainStats {
   totalBlocks: number
   totalTransactions: number
-  totalAddresses: number
-  hashRate: string
-  difficulty: number
-  networkStatus: "online" | "offline"
+  totalAddresses?: number
+  hashRate?: string
+  difficulty?: number
+  networkStatus?: "online" | "offline"
 }
 
 export default function ExplorerPage() {
@@ -30,6 +30,7 @@ export default function ExplorerPage() {
     difficulty: 0,
     networkStatus: "online",
   })
+  const [error, setError] = useState<string | null>(null)
 
   // Load blockchain stats
   useEffect(() => {
@@ -39,26 +40,22 @@ export default function ExplorerPage() {
   const loadStats = async () => {
     try {
       setIsLoading(true)
-      const response = await utxoApi.getBlockchainStats()
+      setError(null)
+      const response = await sanCoinAPI.getBlockchainStats()
+      console.log("Blockchain stats:", response)
       setStats({
-        totalBlocks: response.totalBlocks || 1250,
-        totalTransactions: response.totalTransactions || 8432,
-        totalAddresses: response.totalAddresses || 2156,
-        hashRate: response.hashRate || "125.4 TH/s",
-        difficulty: response.difficulty || 15.2,
-        networkStatus: "online",
+        totalBlocks: Number(response.data.totalBlocks) || 222,
+        totalTransactions: Number(response.data.totalTransactions) || 0,
+        totalAddresses: Number(response.data.totalAddresses) || 0,
+        hashRate: response.data.networkHashRate || "0 H/s",
+        difficulty: typeof response.data.difficulty === "number" ? response.data.difficulty : 0,
+        networkStatus: (response.data.networkStatus as "online" | "offline") || "online",
       })
-    } catch (error) {
-      console.error("Failed to load stats:", error)
-      // Set mock data for demo
-      setStats({
-        totalBlocks: 1250,
-        totalTransactions: 8432,
-        totalAddresses: 2156,
-        hashRate: "125.4 TH/s",
-        difficulty: 15.2,
-        networkStatus: "online",
-      })
+    } catch (err: any) {
+      console.error("Failed to load stats:", err)
+      setError(err?.message || "Failed to load network stats.")
+      // Do not set mock data; keep zeros to reflect real backend status
+      setStats((prev) => ({ ...prev, totalBlocks: 0, totalTransactions: 0 }))
     } finally {
       setIsLoading(false)
     }
@@ -69,17 +66,14 @@ export default function ExplorerPage() {
 
     try {
       setIsLoading(true)
-
       // Determine search type based on query format
       if (searchQuery.match(/^[0-9]+$/)) {
-        // Block number
         window.location.href = `/explorer/block/${searchQuery}`
       } else if (searchQuery.startsWith("san1")) {
-        // Address
         window.location.href = `/explorer/address/${searchQuery}`
-      } else if (searchQuery.match(/^[a-fA-F0-9]{64}$/)) {
-        // Transaction hash
-        window.location.href = `/explorer/tx/${searchQuery}`
+      } else if (searchQuery.match(/^(0x)?[a-fA-F0-9]{64}$/)) {
+        const clean = searchQuery.startsWith("0x") ? searchQuery.slice(2) : searchQuery
+        window.location.href = `/explorer/tx/${clean}`
       } else {
         alert("Invalid search query. Please enter a block number, address, or transaction hash.")
       }
@@ -112,19 +106,30 @@ export default function ExplorerPage() {
                 placeholder="Search by Address / Txn Hash / Block"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className="pl-10 bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+                aria-label="Search by Address / Txn Hash / Block"
               />
             </div>
             <Button
               onClick={handleSearch}
               disabled={isLoading || !searchQuery.trim()}
               className="bg-cyan-500 hover:bg-cyan-600 text-gray-900"
+              aria-label="Search"
             >
               <Search className="h-4 w-4" />
             </Button>
           </div>
         </div>
+
+        {error && (
+          <div className="mt-4 text-sm text-red-300">
+            Failed to load network stats. {error}{" "}
+            <button onClick={loadStats} className="underline hover:text-red-200">
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Network Statistics */}
@@ -133,28 +138,28 @@ export default function ExplorerPage() {
           title="Total Blocks"
           value={formatNumber(stats.totalBlocks)}
           icon={<Blocks className="h-6 w-6" />}
-          change="+1.2%"
+          change={undefined}
           trend="up"
         />
         <ExplorerStatCard
           title="Total Transactions"
           value={formatNumber(stats.totalTransactions)}
           icon={<Activity className="h-6 w-6" />}
-          change="+5.8%"
+          change={undefined}
           trend="up"
         />
         <ExplorerStatCard
           title="Active Addresses"
-          value={formatNumber(stats.totalAddresses)}
+          value={formatNumber(stats.totalAddresses || 0)}
           icon={<Users className="h-6 w-6" />}
-          change="+3.2%"
+          change={undefined}
           trend="up"
         />
         <ExplorerStatCard
           title="Hash Rate"
           value={stats.hashRate || "0 H/s"}
           icon={<TrendingUp className="h-6 w-6" />}
-          change="+0.8%"
+          change={undefined}
           trend="up"
         />
       </div>
@@ -173,6 +178,7 @@ export default function ExplorerPage() {
               variant="ghost"
               size="sm"
               className="text-gray-400 hover:text-white"
+              aria-label="Refresh stats"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
@@ -194,6 +200,7 @@ export default function ExplorerPage() {
               variant="ghost"
               size="sm"
               className="text-gray-400 hover:text-white"
+              aria-label="Refresh stats"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
@@ -217,14 +224,14 @@ export default function ExplorerPage() {
                 <div className="w-8 h-8 bg-green-400 rounded-full animate-pulse"></div>
               </div>
               <h3 className="text-white font-semibold">Network Status</h3>
-              <p className="text-green-400">Online</p>
+              <p className="text-green-400">{stats.networkStatus === "offline" ? "Offline" : "Online"}</p>
             </div>
             <div className="text-center">
               <div className="w-16 h-16 bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
                 <TrendingUp className="h-8 w-8 text-blue-400" />
               </div>
               <h3 className="text-white font-semibold">Difficulty</h3>
-              <p className="text-blue-400">{stats.difficulty || 0}T</p>
+              <p className="text-blue-400">{stats.difficulty ?? 0}T</p>
             </div>
             <div className="text-center">
               <div className="w-16 h-16 bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-3">

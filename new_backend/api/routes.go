@@ -17,26 +17,26 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 		// Wallet routes
 		walletGroup := apiV1.Group("/wallet")
 		{
-			walletGroup.POST("", h.CreateWallet)
+			walletGroup.POST("/create", h.CreateWallet)
+			walletGroup.POST("/restore", h.RestoreWallet)
+			walletGroup.POST("/unlock", h.UnlockWallet)
 			walletGroup.GET("/:address/balance", h.GetWalletBalance)
 		}
 
 		// Transaction routes
 		txGroup := apiV1.Group("/transactions")
 		{
-			txGroup.POST("", h.CreateTransaction)
+			// The new endpoint for broadcasting a pre-signed transaction
+			txGroup.POST("/broadcast", h.BroadcastTransaction)
 			txGroup.GET("/latest", h.GetLatestTransactions)
-			// txGroup.GET("/:hash", h.GetTransaction) // TODO: Implement
 		}
 
 		// Blockchain routes
 		bcGroup := apiV1.Group("/blockchain")
 		{
 			bcGroup.POST("/mine", h.MineBlock)
-			// bcGroup.GET("/blocks/:identifier", h.GetBlock) // TODO: Implement
 		}
-		
-		// A more RESTful way for latest blocks
+
 		apiV1.GET("/blocks/latest", h.GetLatestBlocks)
 	}
 }

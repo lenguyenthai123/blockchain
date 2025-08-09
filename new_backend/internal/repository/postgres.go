@@ -18,8 +18,8 @@ type Repository interface {
 	AddBlock(ctx context.Context, block *core.Block) error
 	GetLastBlock(ctx context.Context) (*core.Block, error)
 	FindUTXOs(ctx context.Context, address string) ([]model.UTXO, error)
+	FindUTXO(ctx context.Context, txID []byte, vout int) (*model.UTXO, error) // Thêm dòng này
 	FindTransaction(ctx context.Context, txID []byte) (*core.Transaction, error)
-	// Add these lines
 	GetStatsSummary(ctx context.Context) (*SummaryStats, error)
 	GetLatestBlocks(ctx context.Context, limit int) ([]BlockSummary, error)
 	GetLatestTransactions(ctx context.Context, limit int) ([]TransactionSummary, error)
@@ -138,6 +138,24 @@ func (r *PostgresRepository) FindUTXOs(ctx context.Context, address string) ([]m
 	return utxos, nil
 }
 
+// FindUTXO finds a single unspent transaction output.
+func (r *PostgresRepository) FindUTXO(ctx context.Context, txID []byte, vout int) (*model.UTXO, error) {
+	utxo := &model.UTXO{TxID: txID, Vout: vout}
+	txHashHex := fmt.Sprintf("%x", txID)
+
+	err := r.db.QueryRow(ctx,
+		`SELECT amount, script_pub_key FROM utxos WHERE tx_hash = $1 AND vout_index = $2`,
+		txHashHex, vout).Scan(&utxo.Amount, new(string)) // We don't need the script pub key here
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return utxo, nil
+}
+
 // FindTransaction finds a transaction by its ID (hex string)
 func (r *PostgresRepository) FindTransaction(ctx context.Context, txID []byte) (*core.Transaction, error) {
 	// This is a simplified implementation. A full one would reconstruct the transaction
@@ -170,8 +188,8 @@ func (r *PostgresRepository) FindTransaction(ctx context.Context, txID []byte) (
 // New methods for statistics
 
 type SummaryStats struct {
-	TotalTransactions   int64   `json:"total_transactions"`
-	LastFinalizedBlock  int64   `json:"last_finalized_block"`
+	TotalTransactions     int64   `json:"total_transactions"`
+	LastFinalizedBlock    int64   `json:"last_finalized_block"`
 	TransactionsPerSecond float64 `json:"transactions_per_second"`
 }
 

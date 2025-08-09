@@ -10,18 +10,39 @@
 # 6. Check the final balances of both wallets.
 
 BASE_URL="http://localhost:8080/api/v1"
+KEYSTORE_DIR="./keystores"
+mkdir -p $KEYSTORE_DIR
 
-echo "--- 1. Creating Wallets ---"
-echo "Creating Miner Wallet..."
-MINER_WALLET=$(curl -s -X POST $BASE_URL/wallet)
-MINER_ADDRESS=$(echo $MINER_WALLET | jq -r .address)
-MINER_PRIVATE_KEY=$(echo $MINER_WALLET | jq -r .private_key)
+echo "--- 1. Creating Wallets (and downloading keystore files) ---"
+echo "Creating Miner Wallet with a passphrase..."
+# Use -J to use the filename from Content-Disposition header
+# Use -o to specify output file. We'll save it in the keystores directory.
+curl -s -X POST -H "Content-Type: application/json" \
+-d '{"passphrase": "my-secret-password-123"}' \
+-J -o "$KEYSTORE_DIR/miner_keystore.json" \
+$BASE_URL/wallet
 
-echo "Creating Recipient Wallet..."
-RECIPIENT_WALLET=$(curl -s -X POST $BASE_URL/wallet)
-RECIPIENT_ADDRESS=$(echo $RECIPIENT_WALLET | jq -r .address)
+# Extract info from the downloaded keystore file
+MINER_KEYSTORE_CONTENT=$(cat "$KEYSTORE_DIR/miner_keystore.json")
+MINER_ADDRESS=$(echo $MINER_KEYSTORE_CONTENT | jq -r .address)
+MINER_PRIVATE_KEY=$(echo $MINER_KEYSTORE_CONTENT | jq -r .crypto.privateKey)
+MINER_MNEMONIC=$(echo $MINER_KEYSTORE_CONTENT | jq -r .crypto.mnemonic)
 
+echo "Miner Keystore saved to $KEYSTORE_DIR/miner_keystore.json"
+echo "Miner Mnemonic: $MINER_MNEMONIC" # IMPORTANT: In a real app, never log this!
 echo "Miner Address: $MINER_ADDRESS"
+echo ""
+
+echo "Creating Recipient Wallet (without passphrase)..."
+curl -s -X POST -H "Content-Type: application/json" \
+-d '{}' \
+-J -o "$KEYSTORE_DIR/recipient_keystore.json" \
+$BASE_URL/wallet
+
+RECIPIENT_KEYSTORE_CONTENT=$(cat "$KEYSTORE_DIR/recipient_keystore.json")
+RECIPIENT_ADDRESS=$(echo $RECIPIENT_KEYSTORE_CONTENT | jq -r .address)
+
+echo "Recipient Keystore saved to $KEYSTORE_DIR/recipient_keystore.json"
 echo "Recipient Address: $RECIPIENT_ADDRESS"
 echo ""
 

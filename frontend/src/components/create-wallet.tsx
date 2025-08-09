@@ -62,6 +62,7 @@ export default function CreateWallet({ onWalletCreated, onWalletImported }: Crea
 
     try {
       const wallet = await importWalletFromPrivateKey(importPrivateKey, password)
+      console.log("Imported wallet:", wallet)
       onWalletImported(wallet)
     } catch (error) {
       console.error("Import error:", error)

@@ -7,6 +7,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { TrendingUp, TrendingDown, Minus, Activity, Coins, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 import { useWallet } from "@/contexts/wallet-context"
 import { sanCoinAPI, type TransactionWithDirection } from "@/lib/utxo-api"
+import { generateAddress,generateMnemonic, mnemonicToKeyPair, type KeyPair } from "@/lib/crypto"
 
 interface BalancePoint {
   timestamp: number
@@ -97,6 +98,7 @@ export default function PortfolioChart() {
     // Calculate balance at each transaction point
     sortedTxs.forEach((tx, index) => {
       let balanceChange = 0
+      const senderAddress = generateAddress(Buffer.from(tx?.inputs?.[0]?.publicKey, "hex"))
 
       if (tx.type === "coinbase") {
         // Mining reward - always increases balance

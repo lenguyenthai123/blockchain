@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 )
 
 const (
-	MiningDifficulty = 2 // Simple difficulty: hash must start with 2 zeros
+	MiningDifficulty = 2  // Simple difficulty: hash must start with 2 zeros
 	CoinbaseReward   = 50 // Reward for mining a block
 )
 
@@ -35,6 +36,53 @@ func (s *BlockchainService) AddTransactionToMempool(tx *core.Transaction) {
 	mempool.Lock()
 	defer mempool.Unlock()
 	mempool.transactions[tx.IDHex()] = tx
+}
+
+// SubmitTransaction verifies a pre-signed transaction and adds it to the mempool.
+func (s *BlockchainService) SubmitTransaction(ctx context.Context, tx *core.Transaction) error {
+	// 1. Basic validation & Signature verification
+	if !tx.Verify(s.repo) {
+		return errors.New("transaction signature verification failed")
+	}
+
+	// 2. Prevent double-spending by checking against the blockchain's UTXO set
+	var totalInput int64
+	for _, vin := range tx.Vin {
+		utxo, err := s.repo.FindUTXO(ctx, vin.TxID, vin.Vout)
+		if err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return fmt.Errorf("input %x:%d is not a valid UTXO (already spent or does not exist)", vin.TxID, vin.Vout)
+			}
+			return fmt.Errorf("error checking for UTXO: %w", err)
+		}
+		totalInput += utxo.Amount
+
+		// Check against mempool for double-spending in pending transactions
+		mempool.RLock()
+		for _, memTx := range mempool.transactions {
+			for _, memVin := range memTx.Vin {
+				if bytes.Equal(memVin.TxID, vin.TxID) && memVin.Vout == vin.Vout {
+					mempool.RUnlock()
+					return fmt.Errorf("input %x:%d is already pending in mempool", vin.TxID, vin.Vout)
+				}
+			}
+		}
+		mempool.RUnlock()
+	}
+
+	// 3. Check if transaction is balanced (inputs >= outputs)
+	var totalOutput int64
+	for _, vout := range tx.Vout {
+		totalOutput += vout.Value
+	}
+
+	if totalInput < totalOutput {
+		return fmt.Errorf("transaction is unbalanced: total input %d < total output %d", totalInput, totalOutput)
+	}
+
+	// 4. Add to mempool
+	s.AddTransactionToMempool(tx)
+	return nil
 }
 
 func (s *BlockchainService) CreateAndSignTransaction(ctx context.Context, privateKeyHex, from, to string, amount int64) (*core.Transaction, error) {
@@ -84,15 +132,15 @@ func (s *BlockchainService) CreateAndSignTransaction(ctx context.Context, privat
 	}
 
 	tx := core.Transaction{
-		ID:   nil,
-		Vin:  inputs,
-		Vout: outputs,
+		ID:        nil,
+		Vin:       inputs,
+		Vout:      outputs,
 		Timestamp: time.Now().Unix(),
 	}
 	tx.SetID()
 
 	// Sign the transaction
-	err = tx.Sign(wallet.PrivateKey, spentUTXOs, s.repo)
+	err = tx.Sign(wallet.PrivateKey, s.repo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign transaction: %w", err)
 	}
@@ -144,7 +192,7 @@ func (s *BlockchainService) MineBlock(ctx context.Context, minerAddress string) 
 	for _, tx := range transactions {
 		delete(mempool.transactions, tx.IDHex())
 	}
-mempool.Unlock()
+	mempool.Unlock()
 
 	return newBlock, nil
 }

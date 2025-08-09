@@ -33,6 +33,16 @@ export interface TransactionWithDirection extends UTXOTransaction {
   fee: number
   counterpartyAddress: string
 }
+export interface ExplorerTransaction {
+  hash: string
+  from: string
+  to: string
+  amount: number
+  fee: number
+  timestamp: number
+  status: "confirmed" | "pending" | "failed"
+  blockNumber?: number
+}
 
 export interface NetworkStats {
   totalSupply: number
@@ -52,8 +62,96 @@ export interface AddressInfo {
   totalReceived: number
   totalSent: number
 }
+export interface ExplorerStats {
+  totalBlocks: number
+  totalTransactions: number
+  totalAddresses?: number
+  hashRate?: string
+  difficulty?: number
+  networkStatus?: "online" | "offline"
+  [key: string]: any
+}
+export interface ExplorerBlock {
+  number: number
+  hash: string
+  timestamp: number
+  transactions: number
+  miner: string
+  size: number
+}
+interface ApiBlock {
+  index: number
+  hash: string
+  previousHash: string
+  timestamp: number
+  transactions: ApiTransaction[]
+  nonce: number
+  difficulty: number
+  merkleRoot: string
+  // backend may include extra fields; we keep flexible
+  [key: string]: any
+}
+interface ApiTransaction {
+  hash: string
+  inputs: {
+    previousTxHash: string
+    outputIndex: number
+    signature: string
+    publicKey: string
+    sequence: number
+  }[]
+  outputs: {
+    amount: number
+    address: string
+    scriptPubKey: string
+  }[]
+  timestamp: number
+  type: string // "coinbase" | "transfer" | etc.
+  minerAddress?: string
+  blockIndex?: number
+  [key: string]: any
+}
+// Internal helpers
+async function request<T = any>(endpoint: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`API error ${res.status}: ${text}`)
+  }
+  return (await res.json()) as T
+}
+
+function unwrapDataArray<T>(payload: any): T[] {
+  // Your backend returns { success: true, data: [...] }
+  if (Array.isArray(payload)) return payload as T[]
+  if (Array.isArray(payload?.data)) return payload.data as T[]
+  return []
+}
 
 export class SanCoinAPI {
+  private async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const url = `${API_BASE_URL}${endpoint}`
+    const config: RequestInit = {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    }
+
+    console.log(`🌐 [utxoApi] ${config.method || "GET"} ${url}`)
+    const res = await fetch(url, config)
+    if (!res.ok) {
+      const text = await res.text()
+      console.error("❌ [utxoApi] Error:", res.status, text)
+      throw new Error(`API error ${res.status}: ${text}`)
+    }
+    const json = (await res.json()) as T
+    return json
+  }
   private baseURL: string
   // import this context: useWallet() should only be used inside React components or hooks, not here.
   constructor(baseURL = "http://localhost:3001") {
@@ -73,7 +171,28 @@ export class SanCoinAPI {
       return 0
     }
   }
+  
+  // GET /api/blockchain/blocks/latest?limit=5
+  async getLatestBlocks(limit = 5): Promise<{ blocks: ExplorerBlock[] }> {
+    const payload = await request(`/api/blockchain/blocks/latest?limit=${limit}`)
+    const items = unwrapDataArray<any>(payload)
 
+    const blocks: ExplorerBlock[] = items.map((b: any) => {
+      const txCount = Array.isArray(b.transactions) ? b.transactions.length : Number(b.transactions ?? 0) || 0
+      const size = new Blob([JSON.stringify(b)]).size
+
+      return {
+        number: Number(b.index ?? b.number ?? 0),
+        hash: String(b.hash),
+        timestamp: Number(b.timestamp ?? Date.now()),
+        transactions: txCount,
+        miner: "unknown", // Not present in this endpoint's payload
+        size,
+      }
+    })
+
+    return { blocks }
+  }
   async getUTXOs(address: string): Promise<any[]> {
     try {
       const response = await fetch(`${this.baseURL}/api/utxo/utxos/${address}`)
@@ -245,6 +364,37 @@ export class SanCoinAPI {
       console.error("Error fetching network stats:", error)
       return null
     }
+  }
+    // Stats for Explorer header cards
+  async getBlockchainStats(): Promise<ExplorerStats> {
+    // Reuse the existing blockchain stats route
+    const stats = await this.request<ExplorerStats>("/api/blockchain/stats")
+    return stats
+  }
+
+  // GET /api/blockchain/transactions/latest?limit=5
+  async getLatestTransactions(limit = 5): Promise<{ transactions: ExplorerTransaction[] }> {
+    const payload = await request(`/api/blockchain/transactions/latest?limit=${limit}`)
+    const items = unwrapDataArray<any>(payload)
+
+    const transactions: ExplorerTransaction[] = items.map((it: any) => {
+      const isCoinbase = String(it.type || "").toLowerCase() === "coinbase"
+      const status: ExplorerTransaction["status"] = typeof it.blockIndex === "number" ? "confirmed" : "pending"
+
+      // This endpoint does not include from/to addresses or fee; we surface known fields
+      return {
+        hash: it.hash,
+        from: isCoinbase ? "Coinbase" : "unknown",
+        to: "unknown",
+        amount: Number(it.amount ?? 0),
+        fee: 0,
+        timestamp: Number(it.timestamp ?? Date.now()),
+        status,
+        blockNumber: it.blockIndex,
+      }
+    })
+
+    return { transactions }
   }
 }
 
