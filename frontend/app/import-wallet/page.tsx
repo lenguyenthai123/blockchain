@@ -21,6 +21,8 @@ import {
   Sparkles,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useWallet } from "@/contexts/wallet-context"
+import { validatePasswordStrength } from "@/lib/security"
 
 export default function ImportWalletPage() {
   const [step, setStep] = useState(1)
@@ -29,7 +31,14 @@ export default function ImportWalletPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [error, setError] = useState("")
   const router = useRouter()
+  const { importWallet } = useWallet()
+
+  // Password validation
+  const passwordValidation = validatePasswordStrength(password)
+  const passwordsMatch = password === confirmPassword && confirmPassword !== ""
 
   const handlePhraseChange = (index: number, value: string) => {
     const newPhrase = [...phrase]
@@ -37,38 +46,57 @@ export default function ImportWalletPage() {
     setPhrase(newPhrase)
   }
 
-  const handleImport = (e: React.FormEvent) => {
+  const handleVerifyPhrase = (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, you would validate the phrase here.
-    // For this simulation, we'll just check if all fields are filled.
-    if (phrase.every((word) => word !== "")) {
-      console.log("Phrase validated, proceeding to password creation.")
-      setStep(2)
-    } else {
-      alert("Please fill in all 12 words of your recovery phrase.")
+    setError("")
+
+    // Check if all fields are filled
+    if (!phrase.every((word) => word !== "")) {
+      setError("Please fill in all 12 words of your recovery phrase.")
+      return
     }
+
+    console.log("🔍 Recovery phrase verified, proceeding to password creation...")
+    setStep(2)
   }
 
-  const handleCreatePassword = (e: React.FormEvent) => {
+  const handleImportWallet = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password !== confirmPassword) {
-      alert("Passwords do not match!")
+    setError("")
+
+    if (!passwordValidation.isValid) {
+      setError("Please fix password requirements")
       return
     }
-    if (password.length < 8) {
-      alert("Password must be at least 8 characters long!")
+
+    if (!passwordsMatch) {
+      setError("Passwords do not match")
       return
     }
-    // Password validation logic would go here.
-    console.log("Password created, wallet imported successfully.")
-    setStep(3)
+
+    try {
+      setIsImporting(true)
+      console.log("🔄 Importing wallet with recovery phrase and password...")
+
+      // Join the phrase and use wallet context to import with password
+      const mnemonicPhrase = phrase.join(" ")
+      await importWallet(mnemonicPhrase, password)
+
+      console.log("✅ Wallet imported successfully")
+      setStep(3)
+    } catch (error) {
+      console.error("❌ Failed to import wallet:", error)
+      setError("Invalid recovery phrase. Please check your words and try again.")
+    } finally {
+      setIsImporting(false)
+    }
   }
 
   const renderStep = () => {
     switch (step) {
       case 1: // Enter Phrase
         return (
-          <form onSubmit={handleImport}>
+          <form onSubmit={handleVerifyPhrase}>
             <CardHeader className="space-y-6 text-center">
               <div className="relative mx-auto">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 opacity-20 blur-xl" />
@@ -118,6 +146,13 @@ export default function ImportWalletPage() {
                   </div>
                 </div>
               </div>
+
+              {error && (
+                <Alert className="border-red-500/20 bg-red-500/10 text-red-300 backdrop-blur-sm">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
             </CardContent>
 
             <CardFooter>
@@ -134,7 +169,7 @@ export default function ImportWalletPage() {
 
       case 2: // Create Password
         return (
-          <form onSubmit={handleCreatePassword}>
+          <form onSubmit={handleImportWallet}>
             <CardHeader className="space-y-6 text-center">
               <div className="relative mx-auto">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 opacity-20 blur-xl" />
@@ -149,7 +184,7 @@ export default function ImportWalletPage() {
                   </span>
                 </CardTitle>
                 <CardDescription className="text-lg text-gray-300">
-                  This password will unlock your imported wallet only on this device
+                  This password will unlock your imported wallet on this device
                 </CardDescription>
               </div>
             </CardHeader>
@@ -205,26 +240,45 @@ export default function ImportWalletPage() {
                 </div>
               </div>
 
+              {/* Password Requirements */}
+              {password && passwordValidation.errors.length > 0 && (
+                <div className="space-y-2 rounded-lg border border-red-500/20 bg-red-500/10 p-4 backdrop-blur-sm">
+                  {passwordValidation.errors.map((error, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm text-red-300">
+                      <AlertTriangle className="h-3 w-3" />
+                      {error}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Password Match Indicator */}
               {confirmPassword && (
                 <div
                   className={`flex items-center gap-2 rounded-lg border p-3 text-sm backdrop-blur-sm ${
-                    password === confirmPassword && password.length >= 8
+                    passwordsMatch && passwordValidation.isValid
                       ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
                       : "border-red-500/20 bg-red-500/10 text-red-300"
                   }`}
                 >
-                  {password === confirmPassword && password.length >= 8 ? (
+                  {passwordsMatch && passwordValidation.isValid ? (
                     <CheckCircle className="h-4 w-4" />
                   ) : (
                     <AlertTriangle className="h-4 w-4" />
                   )}
-                  {password === confirmPassword && password.length >= 8
+                  {passwordsMatch && passwordValidation.isValid
                     ? "Passwords match and meet requirements!"
-                    : password !== confirmPassword
+                    : !passwordsMatch
                       ? "Passwords do not match"
-                      : "Password must be at least 8 characters"}
+                      : "Password does not meet requirements"}
                 </div>
+              )}
+
+              {error && (
+                <Alert className="border-red-500/20 bg-red-500/10 text-red-300 backdrop-blur-sm">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
             </CardContent>
 
@@ -240,10 +294,20 @@ export default function ImportWalletPage() {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:scale-[1.02] hover:from-emerald-400 hover:to-cyan-400 hover:shadow-xl hover:shadow-emerald-500/30"
+                disabled={!passwordValidation.isValid || !passwordsMatch || isImporting}
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:scale-[1.02] hover:from-emerald-400 hover:to-cyan-400 hover:shadow-xl hover:shadow-emerald-500/30 disabled:opacity-50"
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Import Wallet
+                {isImporting ? (
+                  <>
+                    <Download className="mr-2 h-4 w-4 animate-pulse" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Import Wallet
+                  </>
+                )}
               </Button>
             </CardFooter>
           </form>

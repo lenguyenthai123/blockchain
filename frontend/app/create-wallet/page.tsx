@@ -80,9 +80,9 @@ export default function CreateWalletPage() {
       setIsCreating(true)
       setError("")
 
-      console.log("🔨 Creating wallet with secure password...")
+      console.log("🔨 Creating wallet with password...")
 
-      // Tạo wallet với password
+      // Use wallet context to create wallet with password
       const result = await createWallet(password)
 
       setGeneratedMnemonic(result.mnemonic)

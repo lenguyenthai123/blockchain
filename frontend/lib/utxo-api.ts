@@ -154,7 +154,7 @@ export class SanCoinAPI {
   }
   private baseURL: string
   // import this context: useWallet() should only be used inside React components or hooks, not here.
-  constructor(baseURL = "http://localhost:3001") {
+  constructor(baseURL = API_BASE_URL) {
     this.baseURL = baseURL
   }
 

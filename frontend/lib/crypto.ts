@@ -1,6 +1,6 @@
 import { createHash, randomBytes, pbkdf2Sync } from "crypto"
 import * as secp256k1 from "secp256k1"
-
+import * as bip39 from "bip39"
 export interface KeyPair {
   privateKey: string
   publicKey: string
@@ -2100,13 +2100,8 @@ export function generateKeyPair(): KeyPair {
 
 // Generate secure mnemonic phrase (simplified - in production use BIP39)
 export function generateMnemonic(): string {
-  const mnemonic = []
-  for (let i = 0; i < 12; i++) {
-    const randomIndex = randomBytes(1)[0] % BIP39_WORDLIST.length
-    mnemonic.push(BIP39_WORDLIST[randomIndex])
-  }
-
-  return mnemonic.join(" ")
+  // 128 bits entropy → 12 words, 256 bits entropy → 24 words
+  return bip39.generateMnemonic(128)  
 }
 
 // Convert mnemonic to key pair
