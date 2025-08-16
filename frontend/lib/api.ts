@@ -1,4 +1,5 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+let API_BASE_URL = process.env.NEXT_PUBLIC_API_URL  || "http://localhost:3001"
+API_BASE_URL = API_BASE_URL + "/api"
 
 console.log("🔗 API Base URL:", API_BASE_URL)
 
