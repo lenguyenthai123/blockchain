@@ -135,7 +135,7 @@ async function startServer() {
     })
 
     // Start DB watchdog to auto-retry connections
-    startDbWatchdog(Number.parseInt(process.env.DB_WATCHDOG_INTERVAL_MS || "30000", 10))
+    startDbWatchdog();
 
     // Start server
     app.listen(PORT, () => {

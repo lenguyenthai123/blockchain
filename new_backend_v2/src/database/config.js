@@ -71,10 +71,10 @@ function setDbAvailable(v) {
 /**
  * Watchdog: periodically retry DB connection; on success flip availability flag.
  */
-function startDbWatchdog(intervalMs = 30000) {
+function startDbWatchdog(intervalMs = 10*60*1000) {
   setInterval(async () => {
     if (!isDbAvailable()) {
-      await testConnection()
+      // await testConnection()
     }
   }, intervalMs)
 }
