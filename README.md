@@ -2,9 +2,8 @@
 
 # 🪙 SanWallet - UTXO Blockchain Wallet
 
-<img src="/placeholder.svg?height=120&width=120" alt="SanWallet Logo" width="120" height="120">
 
-**A modern, secure, and feature-rich cryptocurrency wallet built on UTXO blockchain technology**
+
 
 [![Next.js](https://img.shields.io/badge/Next.js-15.1.3-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green?style=for-the-badge&logo=node.js)](https://nodejs.org/)
@@ -14,6 +13,17 @@
 
 [🚀 Quick Start](#-quick-start) • [📖 Documentation](#-documentation) • [🔧 Configuration](#-configuration) • [🤝 Contributing](#-contributing)
 
+---
+
+## 👨‍💻 **Project Information**
+
+**👤 Developer:** Lê Nguyên Thái  
+**🎓 Student ID:** 21127162  
+**🌐 Live Demo:** [https://blockchain-two-rho.vercel.app](https://blockchain-two-rho.vercel.app)
+**🔗 Backend API:** [https://blockchain-thaile-4f725e359671.herokuapp.com](https://blockchain-thaile-4f725e359671.herokuapp.com)  
+**📺 Demo Video:** [https://youtu.be/FF54eF-x29c](https://youtu.be/FF54eF-x29c)  
+**💻 GitHub Repository:** [https://github.com/lenguyenthai123/blockchain.git](https://github.com/lenguyenthai123/blockchain.git)
+
 </div>
 
 ---
@@ -21,7 +31,6 @@
 ## 📋 Table of Contents
 
 - [✨ Features](#-features)
-- [🏗️ Architecture](#️-architecture)
 - [🚀 Quick Start](#-quick-start)
 - [🔧 Configuration](#-configuration)
   - [Backend Node Configuration](#backend-node-configuration)
@@ -65,41 +74,6 @@
 
 ---
 
-## 🏗️ Architecture
-
-\`\`\`mermaid
-graph TB
-    subgraph "Frontend (Next.js)"
-        A[Wallet Interface]  B[Transaction Manager]
-        B  C[Blockchain Explorer]
-        C  D[Mining Dashboard]
-    end
-    
-    subgraph "Backend API (Node.js)"
-        E[REST API]  F[Blockchain Core]
-        F  G[UTXO Manager]
-        G  H[Mempool]
-    end
-    
-    subgraph "Storage Layer"
-        I[PostgreSQL]  J[Block Storage]
-        J  K[Transaction Index]
-        K  L[UTXO Set]
-    end
-    
-    subgraph "Mining Network"
-        M[Block Miner]  N[Proof of Work]
-        N  O[Block Validation]
-    end
-    
-    A  E
-    H  M
-    F  I
-    O  F
-\`\`\`
-
----
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -112,8 +86,8 @@ graph TB
 ### 1️⃣ Clone Repository
 
 \`\`\`bash
-git clone https://github.com/your-username/sanwallet.git
-cd sanwallet
+git clone https://github.com/lenguyenthai123/blockchain.git
+cd blockchain
 \`\`\`
 
 ### 2️⃣ Setup Backend
@@ -156,26 +130,26 @@ Create a `.env` file in the `backend` directory:
 \`\`\`bash
 # 🌐 Server Configuration
 NODE_ENV=development                    # Environment: development, production, test
+
 PORT=3001                              # API server port
+
 FRONTEND_URL=http://localhost:3000     # Frontend URL for CORS
 
 # 🗄️ Database Configuration
-DATABASE_URL=postgresql://user:password@host:port/database?sslmode=require
+DATABASE_URL=postgresql://user:password@host:port/database?
+
+sslmode=require
 # PostgreSQL connection string - supports Neon, Supabase, local PostgreSQL
 
 # 🔐 Security Configuration
 JWT_SECRET=your-super-secret-jwt-key-here           # JWT signing secret (32+ chars)
+
 ENCRYPTION_KEY=your-32-character-encryption-key    # AES encryption key (32 chars)
 
 # ⛓️ Blockchain Settings
-MINING_DIFFICULTY=2                    # Mining difficulty (2-6 recommended)
+MINING_DIFFICULTY=4                    # Mining difficulty (2-6 recommended)
 MINING_REWARD=100                      # Block reward in SAN coins
 MAX_TRANSACTIONS_PER_BLOCK=100        # Maximum transactions per block
-
-# 🚦 Rate Limiting
-RATE_LIMIT_WINDOW_MS=900000           # Rate limit window (15 minutes)
-RATE_LIMIT_MAX_REQUESTS=100           # Max requests per window
-\`\`\`
 
 ### Miner Configuration
 
@@ -190,7 +164,9 @@ MINE_BATCH_SIZE=100                          # Transactions per mining batch
 
 # 🔄 Mining Modes
 NODE_ROLE=miner                              # Node role: server, miner, or both
+
 MEMPOOL_MODE=local                           # Mempool mode: local or distributed
+
 MINER_ONCE=false                             # Mine once and exit (for testing)
 
 # 🌐 Network Configuration
@@ -207,14 +183,17 @@ NEXT_PUBLIC_API_URL=http://localhost:3001/api    # Backend API endpoint
 
 # 🌐 Network Configuration
 NEXT_PUBLIC_NETWORK_NAME=SanCoin                 # Network display name
+
 NEXT_PUBLIC_CHAIN_ID=1                           # Chain ID for network identification
 
 # 🔐 Security Settings
 NEXT_PUBLIC_ENCRYPTION_ENABLED=true             # Enable client-side encryption
+
 NEXT_PUBLIC_SESSION_TIMEOUT=3600000             # Session timeout (1 hour)
 
 # 🎨 UI Configuration
 NEXT_PUBLIC_THEME=dark                           # Default theme: light, dark, auto
+
 NEXT_PUBLIC_ENABLE_ANIMATIONS=true              # Enable UI animations
 \`\`\`
 
@@ -353,60 +332,6 @@ docker-compose up -d --scale miner=3
 
 ---
 
-## 🛠️ Development
-
-### Code Structure
-
-\`\`\`
-sanwallet/
-├── 📁 app/                    # Next.js app directory
-│   ├── 📁 dashboard/          # Wallet dashboard
-│   ├── 📁 explorer/           # Blockchain explorer
-│   └── 📁 create-wallet/      # Wallet creation
-├── 📁 components/             # React components
-│   ├── 📁 ui/                 # UI components
-│   ├── 📁 layout/             # Layout components
-│   └── 📁 wallet/             # Wallet components
-├── 📁 lib/                    # Utility libraries
-├── 📁 contexts/               # React contexts
-└── 📁 backend/                # Backend API
-    ├── 📁 src/
-    │   ├── 📁 core/           # Blockchain core
-    │   ├── 📁 routes/         # API routes
-    │   ├── 📁 models/         # Database models
-    │   └── 📁 miner/          # Mining logic
-    └── 📁 test/               # Test files
-\`\`\`
-
-### Testing
-
-\`\`\`bash
-# Run backend tests
-cd backend
-npm test
-
-# Run frontend tests
-npm test
-
-# Run integration tests
-npm run test:integration
-\`\`\`
-
-### Linting & Formatting
-
-\`\`\`bash
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-
-# Type check
-npm run type-check
-\`\`\`
-
----
-
 ## 📚 References
 
 ### 📖 **Educational Resources**
@@ -470,8 +395,8 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ### 🌟 **Star this repository if you found it helpful!**
 
-**Made with ❤️ by the SanWallet Team**
+**Made with ❤️ by Lê Nguyên Thái**
 
-[🐛 Report Bug](https://github.com/your-username/sanwallet/issues) • [✨ Request Feature](https://github.com/your-username/sanwallet/issues) • [💬 Discussions](https://github.com/your-username/sanwallet/discussions)
+[🐛 Report Bug](https://github.com/lenguyenthai123/blockchain/issues) • [✨ Request Feature](https://github.com/lenguyenthai123/blockchain/issues) • [💬 Discussions](https://github.com/lenguyenthai123/blockchain/discussions)
 
 </div>
