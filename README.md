@@ -28,6 +28,23 @@
 
 ---
 
+## 🧪 **Test Accounts**
+
+For testing purposes, you can use these pre-configured accounts:
+
+### 🔑 **Root Account**
+- **Mnemonic:** `angle busy burden aspect armor arctic angry belt agent bridge blow another`
+- **Address:** `SNC66134458b2eb0f34672265267edec7eafbf557402438ac75ca39eee47d388301`
+- **Purpose:** Main testing account with initial balance
+
+### ⛏️ **Miner Account**
+- **Mnemonic:** `breeze advice balcony bullet board believe area broccoli afford before adult birth`
+- **Purpose:** Mining rewards account for testing mining functionality
+
+> **⚠️ Important:** These are test accounts only. Never use these mnemonics for real funds or production environments.
+
+---
+
 ## 📋 Table of Contents
 
 - [✨ Features](#-features)
