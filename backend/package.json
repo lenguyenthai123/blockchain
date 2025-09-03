@@ -6,10 +6,7 @@
   "scripts": {
     "start:server": "NODE_ROLE=server node src/index.js",
     "miner:once": "MINER_ONCE=true NODE_ROLE=miner node src/index.js",
-    "start:node1": "cross-env ENV_FILE=.env-node-1 node src/server.js",
-    "start:node2": "cross-env ENV_FILE=.env-node-2 node src/server.js",
     "start:miner": "cross-env ENV_FILE=.env-miner node src/block-miner.js",
-    "start:miner-memory": "cross-env ENV_FILE=.env-miner node src/miner-memory.js",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
